@@ -4,16 +4,32 @@
  */
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Selectors
     const skillInput = document.getElementById('skill-input');
     const levelDropdown = document.getElementById('level-dropdown');
     const ctaButton = document.getElementById('cta-button');
-    const resultsGrid = document.getElementById('results-grid');
     const loadingIndicator = document.getElementById('loading');
     const emptyState = document.getElementById('empty-state');
     const toast = document.getElementById('toast');
     const toastMessage = document.getElementById('toast-message');
 
-    // Handle Search
+    // Steps & Grids
+    const resultsNav = document.getElementById('results-nav');
+    const playlistStep = document.getElementById('playlist-step');
+    const certificateStep = document.getElementById('certificate-step');
+    const playlistGrid = document.getElementById('playlist-grid');
+    const certificateGrid = document.getElementById('certificate-grid');
+
+    // Tabs
+    const tabPlaylists = document.getElementById('tab-playlists');
+    const tabCertificates = document.getElementById('tab-certificates');
+
+    // Local results store
+    let currentResults = { playlists: [], certificates: [] };
+
+    /**
+     * Handle Search
+     */
     const handleSearch = async () => {
         const skill = skillInput.value.trim();
         const level = levelDropdown.value;
@@ -23,10 +39,9 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // UI State: Loading
+        // Reset UI
         setLoading(true);
-        resultsGrid.innerHTML = '';
-        emptyState.style.display = 'none';
+        resetViews();
 
         try {
             const response = await fetch('/get-resource', {
@@ -40,16 +55,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(data.error || 'Failed to fetch resources.');
             }
 
-            const resources = await response.json();
+            const data = await response.json();
+            currentResults = data;
 
-            if (!resources || resources.length === 0) {
+            if ((!data.playlists || data.playlists.length === 0) && (!data.certificates || data.certificates.length === 0)) {
                 setLoading(false);
                 emptyState.style.display = 'block';
-                emptyState.innerHTML = `<p>No resources found for "${skill}". Try a broader term?</p>`;
                 return;
             }
 
-            renderResources(resources);
+            // Show Navigation and Step 1
+            resultsNav.style.display = 'flex';
+            renderStep('playlists');
 
         } catch (error) {
             showToast(error.message);
@@ -59,40 +76,61 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // Render Resources with Staggered Animation
-    const renderResources = (resources) => {
-        resultsGrid.innerHTML = '';
-        
-        resources.forEach((resource, index) => {
-            const card = createCard(resource, index);
-            resultsGrid.appendChild(card);
+    /**
+     * Render a specific view step
+     */
+    const renderStep = (step) => {
+        if (step === 'playlists') {
+            playlistGrid.innerHTML = '';
+            playlistStep.classList.add('active');
+            certificateStep.classList.remove('active');
+            tabPlaylists.classList.add('active');
+            tabCertificates.classList.remove('active');
             
-            // Staggered reveal
-            setTimeout(() => {
-                card.classList.add('show');
-            }, index * 100);
-        });
+            currentResults.playlists.forEach((item, index) => {
+                const card = createCard(item, index);
+                playlistGrid.appendChild(card);
+                setTimeout(() => card.classList.add('show'), index * 100);
+            });
+        } 
+        else if (step === 'certificates') {
+            certificateGrid.innerHTML = '';
+            certificateStep.classList.add('active');
+            playlistStep.classList.remove('active');
+            tabCertificates.classList.add('active');
+            tabPlaylists.classList.remove('active');
+
+            currentResults.certificates.forEach((item, index) => {
+                const card = createCard(item, index);
+                certificateGrid.appendChild(card);
+                setTimeout(() => card.classList.add('show'), index * 100);
+            });
+        }
     };
 
-    // Card Factory
+    /**
+     * Card Factory
+     */
     const createCard = (data, index) => {
         const card = document.createElement('div');
         card.className = 'resource-card';
         
-        // Sanitize and handle missing data
-        const title = data.title || 'Untitled Playlist';
-        const channel = data.channel || 'Educational Channel';
-        const duration = data.duration_hours ? `${data.duration_hours}h content` : 'Full Course';
-        const type = data.type || 'Playlist';
-        const desc = data.description || 'A high-quality curated learning resource for this skill.';
+        const title = data.title || 'Untitled';
+        const channel = data.channel || 'Author';
+        const duration = data.duration_hours ? `${data.duration_hours}h` : 'Full';
+        const level = data.level || 'Beginner';
+        const desc = data.description || 'Curated high-quality learning resource.';
         const url = data.url || '#';
         const rank = data.rank || (index + 1);
+
+        const isCert = !url.includes('youtube.com');
+        const btnLabel = isCert ? 'Join Course' : 'Watch Playlist';
 
         card.innerHTML = `
             <div class="card-header">
                 <span class="rank-badge">#${rank}</span>
                 <div class="card-badges">
-                    <span class="pill-badge">${escapeHTML(type)}</span>
+                    <span class="pill-badge">${escapeHTML(level)}</span>
                     <span class="pill-badge">${escapeHTML(duration)}</span>
                 </div>
             </div>
@@ -100,7 +138,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <span class="channel-name">${escapeHTML(channel)}</span>
             <p class="card-desc">${escapeHTML(desc)}</p>
             <a href="${url}" target="_blank" class="btn-watch" rel="noopener noreferrer">
-                Watch Playlist
+                ${btnLabel}
             </a>
         `;
         
@@ -108,10 +146,19 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // UI Helpers
+    const resetViews = () => {
+        resultsNav.style.display = 'none';
+        playlistStep.classList.remove('active');
+        certificateStep.classList.remove('active');
+        emptyState.style.display = 'none';
+        playlistGrid.innerHTML = '';
+        certificateGrid.innerHTML = '';
+    };
+
     const setLoading = (isLoading) => {
         loadingIndicator.style.display = isLoading ? 'block' : 'none';
         ctaButton.disabled = isLoading;
-        ctaButton.textContent = isLoading ? 'Searching...' : 'Find Resources';
+        ctaButton.textContent = isLoading ? 'Curating...' : 'Find Resources';
     };
 
     const showToast = (message) => {
@@ -132,4 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
     skillInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') handleSearch();
     });
+
+    tabPlaylists.addEventListener('click', () => renderStep('playlists'));
+    tabCertificates.addEventListener('click', () => renderStep('certificates'));
 });

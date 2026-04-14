@@ -51,19 +51,34 @@
             </div>
         </section>
 
-        <!-- Results Grid -->
+        <!-- Multi-Step Results -->
         <main class="results-container">
             <div id="loading" class="loading-indicator">
                 <div class="spinner"></div>
-                <p>Curating the best resources for you...</p>
+                <p>Curating your personalized learning path...</p>
             </div>
 
-            <div id="results-grid" class="results-grid">
-                <!-- Staggered cards will appear here -->
+            <!-- Tab Switcher -->
+            <div id="results-nav" class="results-tabs" style="display: none;">
+                <button id="tab-playlists" class="tab-btn active">📺 Resources</button>
+                <button id="tab-certificates" class="tab-btn">🏆 Certifications</button>
+            </div>
+
+            <!-- View Step 1: YouTube Playlists -->
+            <div id="playlist-step" class="results-step active">
+                <div class="step-header">
+                    <h2 class="step-title">📺 Step 1: Core Video Resources</h2>
+                    <p class="step-desc">The best free curated playlists to build your foundation.</p>
+                </div>
+                <div id="playlist-grid" class="results-grid"></div>
+            </div>
+
+            <div id="certificate-step" class="results-step">
+                <div id="certificate-grid" class="results-grid"></div>
             </div>
 
             <div id="empty-state" class="empty-state">
-                <p>Enter a skill above to see curated recommendations.</p>
+                <p>Enter a skill above to generate your learning path.</p>
             </div>
         </main>
     </div>

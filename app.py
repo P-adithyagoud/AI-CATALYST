@@ -16,9 +16,11 @@ CORS(app)
 # 1. Load & index all CSV data at startup
 # ──────────────────────────────────────────────
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+CERT_DIR = os.path.join(DATA_DIR, "certifications")
 
 # Map normalised skill slug → DataFrame
-SKILL_DB: dict[str, pd.DataFrame] = {}
+PLAYLIST_DB: dict[str, pd.DataFrame] = {}
+CERT_DB:     dict[str, pd.DataFrame] = {}
 
 CSV_SKILL_MAP = {
     "c_datastructures_tutorials.csv": ["c data structures", "data structures in c", "c datastructures"],
@@ -30,43 +32,75 @@ CSV_SKILL_MAP = {
     "python_tutorials.csv":           ["python", "python programming", "python tutorials"],
 }
 
+# Add certification files to the map
+CERT_SKILL_MAP = {
+    "Top_10_Python_Certifications-v2.csv": ["python", "python programming"],
+    "Top_10_Java_Certifications-v4.csv":   ["java", "java programming"],
+    "Top_10_CPP_Certifications-v3.csv":    ["c++", "cpp", "cplusplus"],
+    "Top_10_C_Certifications-v2.csv":      ["c", "c programming"],
+}
+
 def _normalize(text: str) -> str:
     return re.sub(r"[^a-z0-9 ]", "", text.lower().strip())
 
+# Initialize Playlists
 for filename, aliases in CSV_SKILL_MAP.items():
     path = os.path.join(DATA_DIR, filename)
-    if not os.path.exists(path):
-        continue
-    try:
-        df = pd.read_csv(path)
-        # Rename link_status column gracefully
-        df = df.loc[:, ~df.columns.str.contains("link_status", case=False)]
-        for alias in aliases:
-            SKILL_DB[_normalize(alias)] = df
-    except Exception as e:
-        print(f"[WARN] Could not load {filename}: {e}")
+    if os.path.exists(path):
+        try:
+            df = pd.read_csv(path)
+            df = df.loc[:, ~df.columns.str.contains("link_status", case=False)]
+            for alias in aliases:
+                PLAYLIST_DB[_normalize(alias)] = df
+        except Exception as e:
+            print(f"[WARN] Playlist load error {filename}: {e}")
 
-print(f"[INFO] Loaded skill keys: {list(SKILL_DB.keys())}")
+# Initialize Certifications
+if os.path.exists(CERT_DIR):
+    for filename, aliases in CERT_SKILL_MAP.items():
+        path = os.path.join(CERT_DIR, filename)
+        if os.path.exists(path):
+            try:
+                df = pd.read_csv(path)
+                for alias in aliases:
+                    CERT_DB[_normalize(alias)] = df
+            except Exception as e:
+                print(f"[WARN] Cert load error {filename}: {e}")
+
+print(f"[INFO] Playlist keys: {list(PLAYLIST_DB.keys())}")
+print(f"[INFO] Cert keys: {list(CERT_DB.keys())}")
 
 # ──────────────────────────────────────────────
-# 2. Helper: CSV row → response dict
+# 2. Helpers: Row → Dict
 # ──────────────────────────────────────────────
-def row_to_resource(row: pd.Series, rank: int) -> dict:
+
+def row_to_playlist(row: pd.Series, rank: int) -> dict:
     url = str(row.get("playlist_url", row.get("url", ""))).strip()
     return {
         "rank":           rank,
         "title":          str(row.get("playlist_title", row.get("title", "Untitled"))).strip(),
         "channel":        str(row.get("channel_name",   row.get("channel", "Unknown"))).strip(),
-        "type":           "playlist",
         "level":          str(row.get("level", "All Levels")).strip(),
         "duration_hours": str(row.get("duration_hours", "N/A")).strip(),
         "url":            url,
         "description":    str(row.get("description", "")).strip(),
     }
 
+def row_to_cert(row: pd.Series, rank: int) -> dict:
+    return {
+        "rank":           rank,
+        "title":          str(row.get("Certification / Course Name", "Untitled Cert")).strip(),
+        "channel":        str(row.get("Company / Provider", "Educational Provider")).strip(),
+        "level":          "All Levels",
+        "duration_hours": "Full Course",
+        "url":            str(row.get("Link", "#")).strip(),
+        "description":    f"Cost: {str(row.get('Cost Structure', 'Contact Provider'))}",
+    }
+
 # ──────────────────────────────────────────────
-# 3. Helper: level filter
+# 3. Helpers: Search & Filter
 # ──────────────────────────────────────────────
+
 LEVEL_KEYWORDS = {
     "beginner":     ["beginner", "basic", "intro", "fundamental", "starter", "all"],
     "intermediate": ["intermediate", "medium", "mid", "moderate", "all"],
@@ -76,88 +110,95 @@ LEVEL_KEYWORDS = {
 def _level_matches(row_level: str, requested: str) -> bool:
     rl   = row_level.lower()
     kws  = LEVEL_KEYWORDS.get(requested.lower(), ["all"])
-    # A range like "Beginner-Advanced" covers everything
-    if "-" in rl or "to" in rl:
-        return True
+    if "-" in rl or "to" in rl: return True
     return any(k in rl for k in kws)
 
 def filter_by_level(df: pd.DataFrame, level: str) -> pd.DataFrame:
-    if not level or level.lower() == "all":
+    if not level or level.lower() == "all" or "level" not in df.columns:
         return df
     mask = df["level"].apply(lambda v: _level_matches(str(v), level))
     filtered = df[mask]
-    return filtered if not filtered.empty else df   # fallback: return all if no match
+    return filtered if not filtered.empty else df
+
+def find_in_db(db: dict, skill: str, map_func, limit=10, level=None):
+    normalized = _normalize(skill)
+    # Exact match
+    if normalized in db:
+        df = db[normalized]
+        if level: df = filter_by_level(df, level)
+        return [map_func(row, i+1) for i, (_, row) in enumerate(df.head(limit).iterrows())]
+    
+    # Partial match
+    for key, df in db.items():
+        if normalized in key or key in normalized:
+            if level: df = filter_by_level(df, level)
+            return [map_func(row, i+1) for i, (_, row) in enumerate(df.head(limit).iterrows())]
+    return []
 
 # ──────────────────────────────────────────────
-# 4. LLM fallback via Anthropic SDK
+# 4. LLM fallback
 # ──────────────────────────────────────────────
-SYSTEM_PROMPT = """You are a strict YouTube learning resource recommendation engine.
-Your ONLY job is to return a JSON array — no explanation, no markdown, no code fences.
+
+SYSTEM_PROMPT = """You are a high-end learning resource recommendation engine.
+Your ONLY job is to return a JSON object containing two distinct lists — no explanation, no markdown, no code fences.
+
+JSON Structure:
+{
+  "playlists": [ ... 10 YouTube playlist objects ... ],
+  "certificates": [ ... 10 professional certificate course objects (Coursera, Udemy, etc.) ... ]
+}
 
 Rules:
-1. Return EXACTLY 10 objects — no more, no less.
-2. Prefer YouTube PLAYLISTS over individual videos.
-3. No channel homepage URLs (e.g. youtube.com/@SomeChannel).
-4. No YouTube Shorts (under 60 seconds).
-5. No duplicate channels unless unavoidable.
-6. All URLs must be real, direct YouTube playlist or video links.
-7. Rank by: completeness → teaching clarity → popularity → recency → level match.
+1. Return 10 resources for EACH category.
+2. Playlists must be direct YouTube playlist links.
+3. Certificates must be from reputable platforms (Coursera, edX, Udemy, etc.).
 
-Output format (raw JSON array only):
-[
-  {
-    "rank": 1,
-    "title": "",
-    "channel": "",
-    "type": "playlist",
-    "level": "",
-    "duration_hours": "",
-    "url": "",
-    "description": ""
-  }
-]"""
+Object format:
+{
+  "rank": 1,
+  "title": "",
+  "channel": "",
+  "level": "Beginner/Intermediate/Advanced",
+  "duration_hours": "",
+  "url": "",
+  "description": ""
+}"""
 
-def llm_fallback(skill: str, level: str) -> list[dict]:
-    # Reads GROQ_API_KEY from env
+def llm_fallback(skill: str, level: str, category: str = "both") -> dict:
     client = Groq()
+    
+    prompt_instruction = f"Return BOTH top 10 YouTube playlists and top 10 professional certificates for: {skill} ({level})."
+    if category == "certificates":
+        prompt_instruction = f"Return ONLY top 10 professional certificates for: {skill} ({level}). Leave the 'playlists' key as an empty array []."
+    elif category == "playlists":
+        prompt_instruction = f"Return ONLY top 10 YouTube playlists for: {skill} ({level}). Leave the 'certificates' key as an empty array []."
+
     user_msg = (
-        f"Return the TOP 10 best YouTube resources for learning: {skill}\n"
-        f"Target level: {level}\n"
-        f"Respond ONLY with a valid JSON array — no text before or after."
+        f"Instruction: {prompt_instruction}\n"
+        f"Respond ONLY with a valid JSON object."
     )
     
     completion = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_msg}
-        ],
+        messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": user_msg}],
         temperature=0.2,
         max_tokens=2048,
     )
     
     raw = completion.choices[0].message.content.strip()
-    # Strip any accidental markdown fences
-    raw = re.sub(r"^```[a-zA-Z]*\n?", "", raw)
-    raw = re.sub(r"\n?```$", "", raw)
+    raw = re.sub(r"^```[a-zA-Z]*\n?", "", raw); raw = re.sub(r"\n?```$", "", raw)
     
     try:
         data = json.loads(raw)
-    except json.JSONDecodeError as e:
-        print(f"[ERROR] Failed to parse JSON from Groq: {e}\nRaw Content: {raw}")
-        raise ValueError("LLM did not return a valid JSON array")
-
-    if not isinstance(data, list):
-        raise ValueError("LLM did not return a JSON array")
-        
-    # Re-index ranks
-    for i, item in enumerate(data, 1):
-        item["rank"] = i
-    return data[:10]
+        if not isinstance(data, dict): data = {"playlists": [], "certificates": []}
+        return data
+    except:
+        return {"playlists": [], "certificates": []}
 
 # ──────────────────────────────────────────────
 # 5. Main endpoint
 # ──────────────────────────────────────────────
+
 @app.route("/get-resource", methods=["POST"])
 def get_resource():
     body = request.get_json(silent=True) or {}
@@ -167,55 +208,37 @@ def get_resource():
     if not skill:
         return jsonify({"error": "skill is required"}), 400
 
-    normalized_skill = _normalize(skill)
+    results = {"playlists": [], "certificates": []}
 
-    # ── CSV lookup (exact + partial match) ──
-    matched_df: pd.DataFrame | None = None
+    # 1. Search Local Playlists
+    local_playlists = find_in_db(PLAYLIST_DB, skill, row_to_playlist, level=level)
+    results["playlists"] = local_playlists
 
-    def _word_match(needle: str, haystack: str) -> bool:
-        """True if needle is a full-word substring of haystack (or vice versa), min 4 chars."""
-        if len(needle) < 4 or len(haystack) < 4:
-            return False
-        padded_h = f" {haystack} "
-        padded_n = f" {needle} "
-        return (f" {needle} " in padded_h or
-                f" {haystack} " in padded_n or
-                haystack.startswith(needle + " ") or
-                haystack.endswith(" " + needle) or
-                needle.startswith(haystack + " ") or
-                needle.endswith(" " + haystack))
+    # 2. Search Local Certificates
+    local_certs = find_in_db(CERT_DB, skill, row_to_cert)
+    results["certificates"] = local_certs
 
-    # Exact key match
-    if normalized_skill in SKILL_DB:
-        matched_df = SKILL_DB[normalized_skill]
-    else:
-        # Smart word-boundary partial match
-        for key, df in SKILL_DB.items():
-            if _word_match(normalized_skill, key):
-                matched_df = df
-                break
+    # 3. Use AI if either is missing
+    missing_playlists = len(results["playlists"]) == 0
+    missing_certs     = len(results["certificates"]) == 0
 
-    if matched_df is not None:
-        filtered = filter_by_level(matched_df, level)
-        top10    = filtered.head(10).reset_index(drop=True)
-        results  = [row_to_resource(row, i + 1) for i, (_, row) in enumerate(top10.iterrows())]
-        return jsonify(results)
+    if missing_playlists or missing_certs:
+        category = "both"
+        if not missing_playlists: category = "certificates"
+        if not missing_certs:     category = "playlists"
+        
+        try:
+            ai_data = llm_fallback(skill, level, category=category)
+            if missing_playlists: results["playlists"] = ai_data.get("playlists", [])
+            if missing_certs:     results["certificates"] = ai_data.get("certificates", [])
+        except Exception as e:
+            print(f"[ERROR] LLM skip: {e}")
 
-    # ── LLM fallback ──
-    try:
-        results = llm_fallback(skill, level)
-        return jsonify(results)
-    except Exception as e:
-        return jsonify({"error": f"LLM fallback failed: {str(e)}"}), 500
+    return jsonify(results)
 
-
-# ──────────────────────────────────────────────
-# 6. Serve frontend
-# ──────────────────────────────────────────────
 @app.route("/")
 def index():
     return app.send_static_file("index.html")
-
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)

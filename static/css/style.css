@@ -222,7 +222,71 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
   gap: 24px;
-  margin-bottom: 80px;
+  margin-bottom: 40px;
+}
+
+.results-step {
+  display: none;
+  opacity: 0;
+  transform: translateX(20px);
+  transition: all 0.5s var(--smooth);
+}
+
+.results-step.active {
+  display: block;
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.step-header {
+  margin-bottom: 32px;
+  text-align: left;
+}
+
+.step-title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.step-desc {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+/* ── TAB NAVIGATION ── */
+.results-tabs {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 40px;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 14px;
+  width: fit-content;
+  border: 1px solid var(--border);
+}
+
+.tab-btn {
+  padding: 10px 24px;
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s var(--smooth);
+}
+
+.tab-btn:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.tab-btn.active {
+  background: var(--gradient-accent);
+  color: #fff;
+  box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
 }
 
 /* ── CARD DESIGN ── */
@@ -236,6 +300,8 @@ body {
   transition: all 0.4s var(--bounce);
   opacity: 0;
   transform: translateY(20px);
+  display: flex;
+  flex-direction: column;
 }
 
 .resource-card.show {
@@ -305,26 +371,42 @@ body {
   overflow: hidden;
   height: 4.5em;
   line-height: 1.5;
+  flex-grow: 1;
 }
 
-.btn-watch {
-  width: 100%;
+.card-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: auto;
+}
+
+.btn-watch, .btn-cert {
   padding: 12px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border);
   border-radius: 10px;
   color: var(--text-main);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   font-weight: 600;
   text-decoration: none;
   text-align: center;
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   transition: all 0.3s var(--smooth);
 }
 
 .btn-watch:hover {
   background: var(--gradient-accent);
   border-color: transparent;
+  transform: scale(1.02);
+}
+
+.btn-cert:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--accent-p);
   transform: scale(1.02);
 }
 
