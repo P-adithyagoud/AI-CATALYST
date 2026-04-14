@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SkillRecommender — Curated YouTube Playlists</title>
+    <!-- SEO -->
+    <meta name="description" content="Discover the top 10 curated YouTube playlists for any skill. Premium AI-powered recommendations for beginners to advanced learners.">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+    <!-- Premium Background -->
+    <div class="bg-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+    </div>
+
+    <div class="container">
+        <!-- Hero Section -->
+        <header class="hero">
+            <h1 class="hero-title">
+                Find the Best Free Resources to <span class="gradient">Learn Any Skill</span>
+            </h1>
+            <p class="hero-subtitle">
+                Top 10 curated playlists. No noise. Only quality.
+            </p>
+        </header>
+
+        <!-- Search Panel -->
+        <section class="search-panel">
+            <div class="search-form" id="search-form">
+                <div class="input-group">
+                    <input 
+                        type="text" 
+                        id="skill-input" 
+                        class="skill-input" 
+                        placeholder="What do you want to learn?" 
+                        aria-label="Skill to learn"
+                        autocomplete="off"
+                    >
+                </div>
+                <select id="level-dropdown" class="level-dropdown" aria-label="Skill level">
+                    <option value="Beginner">🌱 Beginner</option>
+                    <option value="Intermediate">🔥 Intermediate</option>
+                    <option value="Advanced">🚀 Advanced</option>
+                </select>
+                <button id="cta-button" class="cta-button">
+                    Find Resources
+                </button>
+            </div>
+        </section>
+
+        <!-- Results Grid -->
+        <main class="results-container">
+            <div id="loading" class="loading-indicator">
+                <div class="spinner"></div>
+                <p>Curating the best resources for you...</p>
+            </div>
+
+            <div id="results-grid" class="results-grid">
+                <!-- Staggered cards will appear here -->
+            </div>
+
+            <div id="empty-state" class="empty-state">
+                <p>Enter a skill above to see curated recommendations.</p>
+            </div>
+        </main>
+    </div>
+
+    <!-- Error Toast -->
+    <div id="toast" role="alert">
+        <span id="toast-message">Oops! Something went wrong.</span>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
