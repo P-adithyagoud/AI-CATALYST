@@ -98,8 +98,29 @@ def row_to_cert(row: pd.Series, rank: int) -> dict:
     }
 
 # ──────────────────────────────────────────────
-# 3. Helpers: Search & Filter
+# 3. Helpers: Content Moderation & Search
 # ──────────────────────────────────────────────
+
+RESTRICTED_KEYWORDS = [
+    "bomb", "weapon", "grenade", "explosion", "murder", "kill", "suicide",
+    "drugs", "cocaine", "heroin", "meth", "fentanyl", "marijuana",
+    "hack", "bypass", "crack", "ddos", "phishing", "malware", "virus",
+    "porn", "sex", "nsfw", "black magic",
+    "steal", "shoplifting", "robbery", "scam", "fraud"
+]
+
+def is_inappropriate(text: str) -> bool:
+    """Checks if the search text contains restricted keywords using word boundaries."""
+    if not text:
+        return False
+    
+    text_lower = text.lower()
+    for kw in RESTRICTED_KEYWORDS:
+        # Use regex to find whole words only (e.g., 'hack' shouldn't block 'biohacking')
+        pattern = rf"\b{re.escape(kw)}\b"
+        if re.search(pattern, text_lower):
+            return True
+    return False
 
 LEVEL_KEYWORDS = {
     "beginner":     ["beginner", "basic", "intro", "fundamental", "starter", "all"],
@@ -207,6 +228,10 @@ def get_resource():
 
     if not skill:
         return jsonify({"error": "skill is required"}), 400
+
+    # Content Moderation check
+    if is_inappropriate(skill):
+        return jsonify({"error": "please kindly search appropiate skills"}), 400
 
     results = {"playlists": [], "certificates": []}
 
