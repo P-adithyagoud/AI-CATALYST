@@ -550,6 +550,76 @@ body {
   font-size: 1.2rem;
 }
 
+/* ── INTERVIEW PREP UI ── */
+.company-selection {
+  margin-top: 24px;
+}
+
+.company-search-box {
+  margin-bottom: 32px;
+}
+
+.companies-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+  max-height: 500px;
+  overflow-y: auto;
+  padding: 10px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border);
+}
+
+.company-badge {
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text-main);
+  text-align: center;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s var(--smooth);
+}
+
+.company-badge:hover {
+  background: var(--gradient-accent);
+  border-color: transparent;
+  transform: translateY(-3px);
+  box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+}
+
+.company-title {
+  font-size: 2rem;
+  font-weight: 800;
+  margin: 24px 0;
+  color: #fff;
+}
+
+.btn-back {
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s var(--smooth);
+}
+
+.btn-back:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.freq-tag {
+  font-size: 0.75rem;
+  color: var(--accent-b);
+  font-weight: 700;
+  margin-left: 8px;
+}
+
 @keyframes slide-up {
   from { opacity: 0; transform: translateY(40px); }
   to { opacity: 1; transform: translateY(0); }

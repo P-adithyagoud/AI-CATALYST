@@ -80,6 +80,33 @@
             <div id="empty-state" class="empty-state">
                 <p>Enter a skill above to generate your learning path.</p>
             </div>
+
+            <!-- Interview Prep View -->
+            <div id="interview-prep-view" class="results-step">
+                <div class="step-header">
+                    <h2 class="step-title">💼 Step 3: Company-Wise Interview Prep</h2>
+                    <p class="step-desc">Targeted LeetCode questions for top tech companies.</p>
+                </div>
+                
+                <!-- Company Selector -->
+                <div id="company-selection" class="company-selection">
+                    <div class="company-search-box">
+                        <input type="text" id="company-search" placeholder="Search for a company (e.g. Google, Amazon)..." class="skill-input">
+                    </div>
+                    <div id="companies-grid" class="companies-grid">
+                        <!-- Loaded dynamically -->
+                    </div>
+                </div>
+
+                <!-- Questions List -->
+                <div id="questions-view" class="questions-view" style="display: none;">
+                    <button id="back-to-companies" class="btn-back">← Back to Companies</button>
+                    <h3 id="selected-company-title" class="company-title">Company Name</h3>
+                    <div id="questions-grid" class="results-grid">
+                        <!-- Loaded dynamically -->
+                    </div>
+                </div>
+            </div>
         </main>
     </div>
 
@@ -94,10 +121,10 @@
             <span class="btn-icon">🗺️</span>
             <span class="btn-label">Roadmaps</span>
         </a>
-        <a href="https://www.interviewbit.com/" target="_blank" class="stack-btn" aria-label="Interview Prep">
+        <button class="stack-btn" id="interview-prep-btn" aria-label="Interview Prep">
             <span class="btn-icon">💼</span>
             <span class="btn-label">Interview Prep</span>
-        </a>
+        </button>
         <button class="stack-btn" id="recent-search-btn" aria-label="Recent Searched">
             <span class="btn-icon">🕒</span>
             <span class="btn-label">Recent Searched</span>

@@ -173,6 +173,108 @@ document.addEventListener('DOMContentLoaded', () => {
         return p.innerHTML;
     };
 
+    /**
+     * Interview Prep Logic (LeetCode)
+     */
+    const interviewPrepBtn = document.getElementById('interview-prep-btn');
+    const interviewPrepView = document.getElementById('interview-prep-view');
+    const companySearchInput = document.getElementById('company-search');
+    const companiesGrid = document.getElementById('companies-grid');
+    const questionsView = document.getElementById('questions-view');
+    const companySelection = document.getElementById('company-selection');
+    const backToCompanies = document.getElementById('back-to-companies');
+    const questionsGrid = document.getElementById('questions-grid');
+    const selectedCompanyTitle = document.getElementById('selected-company-title');
+
+    let allCompanies = [];
+
+    const showInterviewPrep = async () => {
+        resetViews();
+        interviewPrepView.classList.add('active');
+        if (allCompanies.length === 0) {
+            await fetchCompanies();
+        }
+        renderCompanies(allCompanies);
+    };
+
+    const fetchCompanies = async () => {
+        try {
+            const res = await fetch('/get-companies');
+            allCompanies = await res.json();
+        } catch (err) {
+            showToast('Failed to load companies.');
+        }
+    };
+
+    const renderCompanies = (list) => {
+        companiesGrid.innerHTML = '';
+        list.forEach(name => {
+            const badge = document.createElement('div');
+            badge.className = 'company-badge';
+            badge.textContent = name;
+            badge.onclick = () => loadCompanyQuestions(name);
+            companiesGrid.appendChild(badge);
+        });
+    };
+
+    const loadCompanyQuestions = async (company) => {
+        companySelection.style.display = 'none';
+        questionsView.style.display = 'block';
+        selectedCompanyTitle.textContent = company;
+        questionsGrid.innerHTML = '<div class="loading-indicator" style="display:block;"><div class="spinner"></div><p>Fetching questions...</p></div>';
+
+        try {
+            const res = await fetch(`/get-questions?company=${encodeURIComponent(company)}`);
+            const data = await res.json();
+            renderQuestions(data.questions);
+        } catch (err) {
+            showToast('Failed to load questions.');
+        }
+    };
+
+    const renderQuestions = (questions) => {
+        questionsGrid.innerHTML = '';
+        if (!questions || questions.length === 0) {
+            questionsGrid.innerHTML = '<p class="empty-state">No questions found for this company.</p>';
+            return;
+        }
+
+        questions.forEach((q, index) => {
+            const card = document.createElement('div');
+            card.className = 'resource-card show';
+            
+            const name = q.problem_name || 'Unknown Problem';
+            const link = q.problem_link || '#';
+            const freq = q.num_occur || 0;
+
+            card.innerHTML = `
+                <div class="card-header">
+                    <span class="rank-badge">#${index + 1}</span>
+                    <span class="pill-badge">Freq: ${freq}</span>
+                </div>
+                <h3 class="card-title">${escapeHTML(name)}</h3>
+                <p class="card-desc">Practice this problem directly on LeetCode.</p>
+                <a href="${link}" target="_blank" class="btn-watch" rel="noopener noreferrer">
+                    Solve on LeetCode
+                </a>
+            `;
+            questionsGrid.appendChild(card);
+        });
+    };
+
+    interviewPrepBtn.addEventListener('click', showInterviewPrep);
+
+    companySearchInput.addEventListener('input', (e) => {
+        const term = e.target.value.toLowerCase();
+        const filtered = allCompanies.filter(c => c.toLowerCase().includes(term));
+        renderCompanies(filtered);
+    });
+
+    backToCompanies.addEventListener('click', () => {
+        questionsView.style.display = 'none';
+        companySelection.style.display = 'block';
+    });
+
     // Event Listeners
     ctaButton.addEventListener('click', handleSearch);
     

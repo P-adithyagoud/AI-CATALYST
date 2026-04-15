@@ -17,6 +17,7 @@ CORS(app)
 # ──────────────────────────────────────────────
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 CERT_DIR = os.path.join(DATA_DIR, "certifications")
+LEETCODE_DIR = os.path.join(DATA_DIR, "leetcode", "leetcode_companies")
 
 # Map normalised skill slug → DataFrame
 PLAYLIST_DB: dict[str, pd.DataFrame] = {}
@@ -260,6 +261,43 @@ def get_resource():
             print(f"[ERROR] LLM skip: {e}")
 
     return jsonify(results)
+
+# ──────────────────────────────────────────────
+# 6. Interview Prep (LeetCode)
+# ──────────────────────────────────────────────
+
+@app.route("/get-companies", methods=["GET"])
+def get_companies():
+    """Returns a sorted list of all available companies."""
+    try:
+        if not os.path.exists(LEETCODE_DIR):
+            return jsonify([])
+        companies = [d for d in os.listdir(LEETCODE_DIR) if os.path.isdir(os.path.join(LEETCODE_DIR, d))]
+        return jsonify(sorted(companies))
+    except Exception as e:
+        print(f"[ERROR] get-companies: {e}")
+        return jsonify([]), 500
+
+@app.route("/get-questions", methods=["GET"])
+def get_questions():
+    """Returns questions for a specific company."""
+    company = request.args.get("company", "").strip()
+    if not company:
+        return jsonify({"error": "company name is required"}), 400
+    
+    csv_path = os.path.join(LEETCODE_DIR, company, f"{company}.csv")
+    if not os.path.exists(csv_path):
+        return jsonify({"error": f"Data for {company} not found"}), 404
+    
+    try:
+        df = pd.read_csv(csv_path)
+        # Ensure column names match schema
+        # schema: problem_link, problem_name, num_occur
+        questions = df.to_dict(orient="records")
+        return jsonify({"company": company, "questions": questions})
+    except Exception as e:
+        print(f"[ERROR] get-questions {company}: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/")
 def index():
