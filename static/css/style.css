@@ -513,7 +513,7 @@ body {
 /* ── LEFT STACK ── */
 .left-stack {
   position: fixed;
-  bottom: 32px;
+  top: 32px;
   left: 32px;
   display: flex;
   flex-direction: column;
