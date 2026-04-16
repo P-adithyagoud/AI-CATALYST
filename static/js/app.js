@@ -174,10 +174,16 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     /**
-     * Interview Prep Logic (LeetCode)
+     * Interview Prep Logic
      */
     const interviewPrepBtn = document.getElementById('interview-prep-btn');
     const interviewPrepView = document.getElementById('interview-prep-view');
+    const interviewCategories = document.getElementById('interview-categories');
+    
+    // DSA Sub-View
+    const dsaPrepContent = document.getElementById('dsa-prep-content');
+    const btnDsaCategory = document.getElementById('btn-dsa-category');
+    const backToCategoriesDsa = document.getElementById('back-to-categories-dsa');
     const companySearchInput = document.getElementById('company-search');
     const companiesGrid = document.getElementById('companies-grid');
     const questionsView = document.getElementById('questions-view');
@@ -186,15 +192,49 @@ document.addEventListener('DOMContentLoaded', () => {
     const questionsGrid = document.getElementById('questions-grid');
     const selectedCompanyTitle = document.getElementById('selected-company-title');
 
+    // Resume Sub-View
+    const resumeAnalyzerContent = document.getElementById('resume-analyzer-content');
+    const btnResumeCategory = document.getElementById('btn-resume-category');
+    const backToCategoriesResume = document.getElementById('back-to-categories-resume');
+    const resumeUpload = document.getElementById('resume-upload');
+    const btnTriggerUpload = document.getElementById('btn-trigger-upload');
+    const uploadZone = document.getElementById('upload-zone');
+    const analysisStatus = document.getElementById('analysis-status');
+    const analysisResults = document.getElementById('analysis-results');
+    const statusText = document.getElementById('status-text');
+
     let allCompanies = [];
 
-    const showInterviewPrep = async () => {
+    const showInterviewPrep = () => {
         resetViews();
         interviewPrepView.classList.add('active');
+        showSelectionScreen();
+    };
+
+    const showSelectionScreen = () => {
+        interviewCategories.style.display = 'grid';
+        dsaPrepContent.style.display = 'none';
+        resumeAnalyzerContent.style.display = 'none';
+    };
+
+    const enterDsaPrep = async () => {
+        interviewCategories.style.display = 'none';
+        dsaPrepContent.style.display = 'block';
+        companySelection.style.display = 'block';
+        questionsView.style.display = 'none';
+        
         if (allCompanies.length === 0) {
             await fetchCompanies();
         }
         renderCompanies(allCompanies);
+    };
+
+    const enterResumeAnalyzer = () => {
+        interviewCategories.style.display = 'none';
+        resumeAnalyzerContent.style.display = 'block';
+        uploadZone.style.display = 'block';
+        analysisStatus.style.display = 'none';
+        analysisResults.style.display = 'none';
     };
 
     const fetchCompanies = async () => {
@@ -261,6 +301,186 @@ document.addEventListener('DOMContentLoaded', () => {
             questionsGrid.appendChild(card);
         });
     };
+
+    // Real Resume Analysis logic
+    const handleResumeAnalysis = async (file) => {
+        const role = document.getElementById('target-role').value.trim() || "Software Engineer";
+        const benchmark = document.getElementById('target-benchmark').value;
+
+        // Reset and show loading
+        uploadZone.style.display = 'none';
+        analysisStatus.style.display = 'block';
+        analysisResults.style.display = 'none';
+        statusText.textContent = "Uploading and extracting text...";
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('role', role);
+        formData.append('benchmark', benchmark);
+
+        try {
+            // UX progress steps
+            const progressSteps = [
+                "Simulating ATS scan...",
+                "Recruiter is skimming your profile...",
+                "Hiring Manager deep-dive evaluation...",
+                "Comparing against market competitors...",
+                "Finalizing brutal breakdown..."
+            ];
+            
+            let step = 0;
+            const progressInt = setInterval(() => {
+                if (step < progressSteps.length) {
+                    statusText.textContent = progressSteps[step++];
+                }
+            }, 1800);
+
+            const res = await fetch('/analyze-resume', {
+                method: 'POST',
+                body: formData
+            });
+
+            clearInterval(progressInt);
+
+            if (!res.ok) {
+                const errData = await res.json();
+                throw new Error(errData.error || "Analysis failed");
+            }
+
+            const data = await res.json();
+            renderResumeResults(data);
+
+        } catch (err) {
+            showToast(err.message);
+            uploadZone.style.display = 'block';
+        } finally {
+            analysisStatus.style.display = 'none';
+        }
+    };
+
+    const renderResumeResults = (data) => {
+        analysisResults.style.display = 'block';
+        
+        // Final Score & Market Position
+        document.getElementById('res-score-value').textContent = `${data.final_score || 0}/10`;
+        document.getElementById('res-market').textContent = `Market: ${data.market_positioning || 'N/A'}`;
+        
+        // Verdict Pill
+        const verdictPill = document.getElementById('res-verdict-pill');
+        const verdict = data.recruiter_snap_judgment?.verdict || 'REJECT';
+        verdictPill.textContent = verdict;
+        verdictPill.className = `decision-pill ${verdict.toLowerCase().includes('shortlist') ? 'select' : 'reject'}`;
+
+        // Section Summaries
+        document.getElementById('res-brutal-summary').textContent = data.brutal_analysis?.summary || '';
+        document.getElementById('res-risk-text').textContent = data.rejection_risk?.reason || '';
+
+        // Category Table
+        const hmTable = document.getElementById('res-hm-table');
+        hmTable.innerHTML = '';
+        (data.category_breakdown || []).forEach(cat => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><strong>${cat.category}</strong></td>
+                <td>${cat.weight}</td>
+                <td><span class="pill-badge">${cat.score}/10</span></td>
+                <td>${cat.reason}</td>
+            `;
+            hmTable.appendChild(tr);
+        });
+
+        // ATS Stage
+        document.getElementById('res-ats-match').textContent = `${data.ats_simulation?.keyword_match_score || 0}%`;
+        document.getElementById('res-ats-prob').textContent = data.ats_simulation?.ats_pass_probability || 'Low';
+        
+        const atsMissing = document.getElementById('res-ats-missing');
+        atsMissing.innerHTML = '';
+        (data.ats_simulation?.missing_critical_keywords || []).forEach(kw => {
+            const li = document.createElement('li');
+            li.textContent = kw;
+            atsMissing.appendChild(li);
+        });
+
+        // Recruiter Stage
+        document.getElementById('res-recruiter-impression').textContent = `"${data.recruiter_snap_judgment?.first_impression || ''}"`;
+        const recruiterReasons = document.getElementById('res-recruiter-reasons');
+        recruiterReasons.innerHTML = '';
+        (data.recruiter_snap_judgment?.top_reasons || []).forEach(r => {
+            const li = document.createElement('li');
+            li.textContent = r;
+            recruiterReasons.appendChild(li);
+        });
+
+        // What Works
+        const worksList = document.getElementById('res-works-list');
+        worksList.innerHTML = '';
+        (data.what_works || []).forEach(w => {
+            const li = document.createElement('li');
+            li.textContent = w;
+            worksList.appendChild(li);
+        });
+
+        // Action Projects
+        const actionProjects = document.getElementById('res-action-projects');
+        actionProjects.innerHTML = '';
+        (data.action_plan?.project_ideas || []).forEach(p => {
+            const div = document.createElement('div');
+            div.className = 'project-item';
+            div.innerHTML = `
+                <h6>${escapeHTML(p.title)}</h6>
+                <p><strong>Stack:</strong> ${escapeHTML(p.stack)}</p>
+                <p>${escapeHTML(p.description)}</p>
+            `;
+            actionProjects.appendChild(div);
+        });
+
+        // Action Tools
+        const actionTools = document.getElementById('res-action-tools');
+        actionTools.innerHTML = '';
+        (data.action_plan?.tools_to_learn || []).forEach(t => {
+            const li = document.createElement('li');
+            li.textContent = t;
+            actionTools.appendChild(li);
+        });
+
+        // Rewrite Examples
+        const rewritesContainer = document.getElementById('res-action-rewrites');
+        rewritesContainer.innerHTML = '';
+        (data.action_plan?.bullet_rewrites || []).forEach(ex => {
+            const item = document.createElement('div');
+            item.className = 'rewrite-item';
+            item.innerHTML = `
+                <div class="rewrite-new">Improved: "${escapeHTML(ex.improved)}"</div>
+                <div class="rewrite-orig">From: "${escapeHTML(ex.original)}"</div>
+            `;
+            rewritesContainer.appendChild(item);
+        });
+
+        showToast('Multi-stage analysis complete!');
+    };
+
+    // Event Listeners for Category Selection
+    btnDsaCategory.addEventListener('click', enterDsaPrep);
+    btnResumeCategory.addEventListener('click', enterResumeAnalyzer);
+    backToCategoriesDsa.addEventListener('click', showSelectionScreen);
+    backToCategoriesResume.addEventListener('click', showSelectionScreen);
+
+    // Resume Upload Events
+    btnTriggerUpload.addEventListener('click', () => resumeUpload.click());
+    resumeUpload.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) handleResumeAnalysis(e.target.files[0]);
+    });
+
+    uploadZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadZone.classList.add('dragover');
+    });
+    uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+    uploadZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadZone.classList.remove('dragover');
+        if (e.dataTransfer.files.length > 0) handleResumeAnalysis(e.dataTransfer.files[0]);
+    });
 
     interviewPrepBtn.addEventListener('click', showInterviewPrep);
 

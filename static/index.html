@@ -84,26 +84,183 @@
             <!-- Interview Prep View -->
             <div id="interview-prep-view" class="results-step">
                 <div class="step-header">
-                    <h2 class="step-title">💼 Step 3: Company-Wise Interview Prep</h2>
-                    <p class="step-desc">Targeted LeetCode questions for top tech companies.</p>
+                    <h2 class="step-title">💼 Step 3: Interview Preparation</h2>
+                    <p class="step-desc">Master your interviews with targeted preparation.</p>
+                </div>
+
+                <!-- Category Selection -->
+                <div id="interview-categories" class="interview-categories">
+                    <div class="category-card" id="btn-dsa-category">
+                        <div class="category-icon">🧠</div>
+                        <h3 class="category-name">DSA Preparation</h3>
+                        <p class="category-desc">Targeted LeetCode questions for top tech companies.</p>
+                    </div>
+                    <div class="category-card" id="btn-resume-category">
+                        <div class="category-icon">📄</div>
+                        <h3 class="category-name">Resume Analyzer</h3>
+                        <p class="category-desc">AI-powered mockup to optimize your resume impact.</p>
+                    </div>
                 </div>
                 
-                <!-- Company Selector -->
-                <div id="company-selection" class="company-selection">
-                    <div class="company-search-box">
-                        <input type="text" id="company-search" placeholder="Search for a company (e.g. Google, Amazon)..." class="skill-input">
+                <!-- DSA Category View -->
+                <div id="dsa-prep-content" style="display: none;">
+                    <button class="btn-back" id="back-to-categories-dsa">← Categories</button>
+                    
+                    <!-- Company Selector -->
+                    <div id="company-selection" class="company-selection">
+                        <div class="company-search-box">
+                            <input type="text" id="company-search" placeholder="Search for a company (e.g. Google, Amazon)..." class="skill-input">
+                        </div>
+                        <div id="companies-grid" class="companies-grid">
+                            <!-- Loaded dynamically -->
+                        </div>
                     </div>
-                    <div id="companies-grid" class="companies-grid">
-                        <!-- Loaded dynamically -->
+
+                    <!-- Questions List -->
+                    <div id="questions-view" class="questions-view" style="display: none;">
+                        <button id="back-to-companies" class="btn-back">← Back to Companies</button>
+                        <h3 id="selected-company-title" class="company-title">Company Name</h3>
+                        <div id="questions-grid" class="results-grid">
+                            <!-- Loaded dynamically -->
+                        </div>
                     </div>
                 </div>
 
-                <!-- Questions List -->
-                <div id="questions-view" class="questions-view" style="display: none;">
-                    <button id="back-to-companies" class="btn-back">← Back to Companies</button>
-                    <h3 id="selected-company-title" class="company-title">Company Name</h3>
-                    <div id="questions-grid" class="results-grid">
-                        <!-- Loaded dynamically -->
+                <!-- Resume Analyzer View -->
+                <div id="resume-analyzer-content" style="display: none;">
+                    <button class="btn-back" id="back-to-categories-resume">← Categories</button>
+                    
+                    <div class="resume-analyzer-ui">
+                        <!-- Inputs for Role & Level -->
+                        <div class="resume-meta-inputs" id="resume-meta-inputs">
+                            <div class="input-group">
+                                <label class="input-label">Target Role</label>
+                                <input type="text" id="target-role" class="skill-input" placeholder="e.g. Software Engineer, Data Scientist">
+                            </div>
+                            <div class="input-group">
+                                <label class="input-label">Benchmark Standard</label>
+                                <select id="target-benchmark" class="level-dropdown">
+                                    <option value="FAANG">FAANG / Top Tier</option>
+                                    <option value="Tier-1 Startup">Tier-1 Startup</option>
+                                    <option value="Average Company" selected>Average Company</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="upload-zone" id="upload-zone">
+                            <div class="upload-icon">📤</div>
+                            <h3>Upload your Resume</h3>
+                            <p>Drag and drop your PDF or DOCX file here, or click to browse.</p>
+                            <input type="file" id="resume-upload" hidden accept=".pdf,.doc,.docx">
+                            <button class="cta-button" id="btn-trigger-upload" style="margin-top: 20px;">
+                                Analyze Resume
+                            </button>
+                        </div>
+
+                        <div id="analysis-status" class="analysis-status" style="display: none;">
+                            <div class="spinner"></div>
+                            <p id="status-text">Scanning for keywords...</p>
+                        </div>
+
+                        <!-- Real Analysis Results -->
+                        <div id="analysis-results" class="analysis-results" style="display: none;">
+                            <div class="results-header">
+                                <div class="decision-wrap">
+                                    <div class="score-meta">
+                                        <h3 id="res-score-value" class="score-value">0/10</h3>
+                                        <span id="res-market" class="confidence-tag">Market: Top 5%</span>
+                                    </div>
+                                    <div class="verdict-pill-wrap">
+                                        <span id="res-verdict-pill" class="decision-pill">SHORTLIST</span>
+                                    </div>
+                                </div>
+                                <div class="verdict-box">
+                                    <p id="res-brutal-summary" class="verdict-text"></p>
+                                </div>
+                            </div>
+
+                            <div class="detailed-analysis-grid">
+                                <!-- STAGE 1: ATS -->
+                                <div class="analysis-section ats-section">
+                                    <h4>🤖 STAGE 1: ATS Simulation</h4>
+                                    <div class="ats-stats">
+                                        <div class="stat-item">
+                                            <span class="stat-label">Keyword Match</span>
+                                            <span id="res-ats-match" class="stat-value">0%</span>
+                                        </div>
+                                        <div class="stat-item">
+                                            <span class="stat-label">Pass Probability</span>
+                                            <span id="res-ats-prob" class="stat-value">High</span>
+                                        </div>
+                                    </div>
+                                    <div class="ats-keywords">
+                                        <p class="sub-label">Missing Critical Keywords:</p>
+                                        <ul id="res-ats-missing" class="keyword-tags"></ul>
+                                    </div>
+                                </div>
+
+                                <!-- STAGE 2: RECRUITER -->
+                                <div class="analysis-section recruiter-section">
+                                    <h4>👀 STAGE 2: Recruiter Scan (10s)</h4>
+                                    <p id="res-recruiter-impression" class="text-block italic"></p>
+                                    <div class="recruiter-reasons">
+                                        <p class="sub-label">Top Reasons:</p>
+                                        <ul id="res-recruiter-reasons" class="detailed-list"></ul>
+                                    </div>
+                                </div>
+
+                                <!-- STAGE 3: HIRING MANAGER TABLE -->
+                                <div class="analysis-section hm-section">
+                                    <h4>👨‍💼 STAGE 3: Deep Evaluation</h4>
+                                    <div class="table-container">
+                                        <table class="evaluation-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Category</th>
+                                                    <th>Weight</th>
+                                                    <th>Score</th>
+                                                    <th>Reasoning</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="res-hm-table">
+                                                <!-- Rows injected by JS -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <!-- Action Plan & Rewrites -->
+                                <div class="analysis-section action-plan-section">
+                                    <h4>📋 Strategic Action Plan</h4>
+                                    <div class="action-grid">
+                                        <div class="action-box">
+                                            <h5>🚀 Proposed Projects</h5>
+                                            <div id="res-action-projects" class="projects-mini-list"></div>
+                                        </div>
+                                        <div class="action-box">
+                                            <h5>🛠️ Tools to Master</h5>
+                                            <ul id="res-action-tools" class="keyword-tags"></ul>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="analysis-section rewrites-section">
+                                    <h4>✨ Professional Rewrites</h4>
+                                    <div id="res-action-rewrites" class="rewrites-container"></div>
+                                </div>
+
+                                <div class="analysis-section-group">
+                                    <div class="analysis-section">
+                                        <h4>📉 Rejection Risk</h4>
+                                        <p id="res-risk-text" class="text-block warn"></p>
+                                    </div>
+                                    <div class="analysis-section">
+                                        <h4>🌟 What Works</h4>
+                                        <ul id="res-works-list" class="detailed-list"></ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

@@ -3,3 +3,5 @@ flask-cors>=4.0.0
 pandas>=2.0.0
 groq>=0.10.0
 python-dotenv>=1.0.0
+pypdf>=4.0.0
+docx2txt>=0.8

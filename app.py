@@ -4,17 +4,156 @@ load_dotenv()  # Load environment variables from .env file
 
 import json
 import re
+import io
 import pandas as pd
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from groq import Groq
+try:
+    from pypdf import PdfReader
+    import docx2txt
+except ImportError:
+    PdfReader = None
+    docx2txt = None
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 CORS(app)
 
 # ──────────────────────────────────────────────
-# 1. Load & index all CSV data at startup
+# 0. Resume Parsing Helpers
 # ──────────────────────────────────────────────
+def extract_text_from_file(file) -> str:
+    """Extracts text from PDF or DOCX files."""
+    if not PdfReader or not docx2txt:
+        print("[ERROR] Dependencies missing: pypdf or docx2txt not installed.")
+        return ""
+    
+    filename = file.filename.lower()
+    try:
+        if filename.endswith(".pdf"):
+            reader = PdfReader(file)
+            text = ""
+            for page in reader.pages:
+                text += page.extract_text() + "\n"
+            return text.strip()
+        elif filename.endswith(".docx"):
+            return docx2txt.process(file).strip()
+        elif filename.endswith(".doc"):
+            return docx2txt.process(file).strip()
+        else:
+            return file.read().decode("utf-8", errors="ignore").strip()
+    except Exception as e:
+        print(f"[ERROR] Extraction failed for {filename}: {e}")
+        return ""
+
+@app.route("/analyze-resume", methods=["POST"])
+def analyze_resume():
+    """Elite AI Resume Evaluator endpoint."""
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+    
+    file = request.files["file"]
+    role = request.form.get("role", "Software Engineer")
+    level = request.form.get("level", "Experienced")
+    benchmark = request.form.get("benchmark", "Average Company")
+    
+    resume_text = extract_text_from_file(file)
+    if not resume_text:
+        return jsonify({"error": "Failed to extract text from resume. Ensure it is a valid PDF or DOCX."}), 400
+
+    prompt = f"""
+You are a multi-layer hiring evaluation system consisting of:
+1. ATS (Applicant Tracking System)
+2. Recruiter (10-second screener)
+3. Hiring Manager (deep evaluator)
+
+Target Role: {role}
+Benchmark Standard: {benchmark} (Expectations: FAANG > Tier-1 Startup > Average Company)
+Resume Content: {resume_text}
+
+## CRITICAL DOMAIN ALIGNMENT RULE (MANDATORY):
+- If the resume skills and projects do NOT match the domain of the Target Role, you MUST give a failing overall score (0-4) regardless of how impressive the candidate is in other irrelevant fields.
+- DO NOT credit "potential" or "transferable skills" if core technical requirements are missing.
+- If a candidate is an expert in Domain A but the role is in Domain B with 0 evidence of Domain B skills, they are a REJECT.
+- Assume 1000+ top-tier candidates are applying; you are looking for any reason to say NO.
+
+SCORING CALIBRATION:
+9-10: Exceptional (Top 5% - Perfect fit)
+7-8: Competitive (Likely interview)
+5-6: Average (High risk of rejection)
+3-4: Weak (Mismatch or lacks depth)
+0-2: Immediate Rejection (Irrelevant or no evidence)
+
+OUTPUT FORMAT (STRICT JSON ONLY):
+{{
+  "final_score": number,
+
+  "ats_simulation": {{
+    "keyword_match_score": number,
+    "missing_critical_keywords": ["List"],
+    "ats_pass_probability": "Low / Medium / High"
+  }},
+
+  "recruiter_snap_judgment": {{
+    "first_impression": "Be blunt and honest",
+    "verdict": "Shortlist / Reject",
+    "top_reasons": ["Brutally honest reason 1", "Brutally honest reason 2"]
+  }},
+
+  "category_breakdown": [
+    {{ "category": "Role Match", "weight": "40%", "score": number, "reason": "Be critical of domain alignment" }},
+    {{ "category": "Project Depth", "weight": "25%", "score": number, "reason": "Is it a basic CRUD/Tutorial or real engineering?" }},
+    {{ "category": "Proof of Skill", "weight": "15%", "score": number, "reason": "Links, Demos, Evidence" }},
+    {{ "category": "Skill Signal Quality", "weight": "10%", "score": number, "reason": "Generic buzzwords vs specific expertise" }},
+    {{ "category": "Experience Relevance", "weight": "5%", "score": number, "reason": "Directly related internships/work" }},
+    {{ "category": "Differentiation", "weight": "5%", "score": number, "reason": "Unique edge vs 1000s of others" }}
+  ],
+
+  "brutal_analysis": {{
+    "summary": "Full brutal breakdown. Focus on flaws first.",
+    "competition_comparison": "Why would I pick someone else over this candidate?"
+  }},
+
+  "what_works": ["Real strengths ONLY"],
+
+  "critical_gaps": ["Exact missing skills/tools/domain knowledge"],
+
+  "rejection_risk": {{
+    "will_shortlist": "Yes/No/Uncertain",
+    "reason": "Be honest about the probability"
+  }},
+
+  "action_plan": {{
+    "project_ideas": [
+        {{ "title": "", "description": "", "stack": "", "outcome": "" }}
+    ],
+    "tools_to_learn": ["Specific tools"],
+    "bullet_rewrites": [
+        {{ "original": "", "improved": "" }}
+    ]
+  }},
+
+  "market_positioning": "Bottom 30% / Average / Top 20% / Top 5%"
+}}
+"""
+
+    try:
+        client = Groq()
+        completion = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": "You are a brutal, expert hiring manager. You hate sugarcoating and generic resumes. You penalize heavily for domain mismatches and lack of evidence."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1,
+            response_format={"type": "json_object"}
+        )
+        
+        analysis = json.loads(completion.choices[0].message.content.strip())
+        return jsonify(analysis)
+    except Exception as e:
+        print(f"[ERROR] AI Analysis failed: {e}")
+        return jsonify({"error": "AI Evaluation failed. Please try again."}), 500
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 CERT_DIR = os.path.join(DATA_DIR, "certifications")
 LEETCODE_DIR = os.path.join(DATA_DIR, "leetcode", "leetcode_companies")
