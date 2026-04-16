@@ -62,80 +62,80 @@ def analyze_resume():
         return jsonify({"error": "Failed to extract text from resume. Ensure it is a valid PDF or DOCX."}), 400
 
     prompt = f"""
-You are a multi-layer hiring evaluation system consisting of:
-1. ATS (Applicant Tracking System)
-2. Recruiter (10-second screener)
-3. Hiring Manager (deep evaluator)
+You are an expert ATS Resume Reviewer and Hiring Manager with 15+ years of experience across tech roles.
+Your task is to analyze a candidate's resume against a TARGET ROLE and provide a brutally honest, high-quality, actionable review.
 
+INPUTS:
 Target Role: {role}
-Benchmark Standard: {benchmark} (Expectations: FAANG > Tier-1 Startup > Average Company)
+Benchmark Standard: {benchmark} (FAANG > Tier-1 Startup > Average Company)
 Resume Content: {resume_text}
 
-## CRITICAL DOMAIN ALIGNMENT RULE (MANDATORY):
-- If the resume skills and projects do NOT match the domain of the Target Role, you MUST give a failing overall score (0-4) regardless of how impressive the candidate is in other irrelevant fields.
-- DO NOT credit "potential" or "transferable skills" if core technical requirements are missing.
-- If a candidate is an expert in Domain A but the role is in Domain B with 0 evidence of Domain B skills, they are a REJECT.
-- Assume 1000+ top-tier candidates are applying; you are looking for any reason to say NO.
+---
 
-SCORING CALIBRATION:
-9-10: Exceptional (Top 5% - Perfect fit)
-7-8: Competitive (Likely interview)
-5-6: Average (High risk of rejection)
-3-4: Weak (Mismatch or lacks depth)
-0-2: Immediate Rejection (Irrelevant or no evidence)
+EVALUATION FRAMEWORK:
+1. ATS COMPATIBILITY: Keyword optimization, missing critical keywords, formatting issues. (Score 0-10)
+2. ROLE ALIGNMENT: Match to target role, irrelevant content, missing role-specific skills. (Score 0-10)
+3. IMPACT & ACHIEVEMENTS: Result-driven vs task-based, quantification (metrics/numbers). (Score 0-10)
+4. STRUCTURE & CLARITY: Readability, flow, section ordering, conciseness. (Score 0-10)
+5. SKILLS & PROJECTS ANALYSIS: Relevance, depth, suggestions for missing projects.
+
+---
 
 OUTPUT FORMAT (STRICT JSON ONLY):
 {{
-  "final_score": number,
-
+  "final_score": number (0-10),
+  "hire_verdict": "Hire / No Hire / Borderline",
+  "market_positioning": "Bottom 30% / Average / Top 20% / Top 5%",
+  
   "ats_simulation": {{
-    "keyword_match_score": number,
-    "missing_critical_keywords": ["List"],
+    "keyword_match_score": number (0-100),
+    "missing_critical_keywords": ["List important keywords missing for the target role"],
     "ats_pass_probability": "Low / Medium / High"
   }},
 
   "recruiter_snap_judgment": {{
-    "first_impression": "Be blunt and honest",
+    "first_impression": "Brutally honest 10-second screener summary",
     "verdict": "Shortlist / Reject",
-    "top_reasons": ["Brutally honest reason 1", "Brutally honest reason 2"]
+    "top_reasons": ["List the top 5 critical issues clearly"]
   }},
 
   "category_breakdown": [
-    {{ "category": "Role Match", "weight": "40%", "score": number, "reason": "Be critical of domain alignment" }},
-    {{ "category": "Project Depth", "weight": "25%", "score": number, "reason": "Is it a basic CRUD/Tutorial or real engineering?" }},
-    {{ "category": "Proof of Skill", "weight": "15%", "score": number, "reason": "Links, Demos, Evidence" }},
-    {{ "category": "Skill Signal Quality", "weight": "10%", "score": number, "reason": "Generic buzzwords vs specific expertise" }},
-    {{ "category": "Experience Relevance", "weight": "5%", "score": number, "reason": "Directly related internships/work" }},
-    {{ "category": "Differentiation", "weight": "5%", "score": number, "reason": "Unique edge vs 1000s of others" }}
+    {{ "category": "ATS Compatibility", "weight": "25%", "score": number, "reason": "Be critical of optimization" }},
+    {{ "category": "Role Alignment", "weight": "35%", "score": number, "reason": "Identify irrelevant content vs missing skills" }},
+    {{ "category": "Impact", "weight": "25%", "score": number, "reason": "Check for metrics and outcomes vs tasks" }},
+    {{ "category": "Structure", "weight": "15%", "score": number, "reason": "Evaluate readability and flow" }}
   ],
 
   "brutal_analysis": {{
-    "summary": "Full brutal breakdown. Focus on flaws first.",
+    "summary": "2-3 line direct overall evaluation",
     "competition_comparison": "Why would I pick someone else over this candidate?"
   }},
 
-  "what_works": ["Real strengths ONLY"],
-
-  "critical_gaps": ["Exact missing skills/tools/domain knowledge"],
-
+  "what_works": ["Identify what few things actually stand out"],
+  
   "rejection_risk": {{
-    "will_shortlist": "Yes/No/Uncertain",
-    "reason": "Be honest about the probability"
+    "reason": "Step-by-step actions to improve the resume"
   }},
 
   "action_plan": {{
     "project_ideas": [
         {{ "title": "", "description": "", "stack": "", "outcome": "" }}
     ],
-    "tools_to_learn": ["Specific tools"],
+    "tools_to_learn": ["Specific certifications or tools to add"],
     "bullet_rewrites": [
-        {{ "original": "", "improved": "" }}
+        {{ "original": "Weak bullet point", "improved": "Quantified, result-driven rewrite" }}
     ]
-  }},
-
-  "market_positioning": "Bottom 30% / Average / Top 20% / Top 5%"
+  }}
 }}
+
+STRICT RULES:
+- Be brutally honest, avoid generic praise.
+- Give specific rewrites, not vague suggestions.
+- Focus on impact, metrics, and role relevance.
+- Assume this resume is competing at a top 10% level.
+- If the resume domain doesn't match the target role, FAIL it immediately (Hire Verdict: No Hire, Score < 4).
 """
+
 
     try:
         client = Groq()

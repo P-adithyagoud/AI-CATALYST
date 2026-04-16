@@ -1,129 +1,108 @@
-# SkillPath — AI-Powered Skill Recommendation Engine
+# SkillPath — AI-Powered Career Accelerator 🚀
 
-## 📁 Folder Structure
-
-```
-skill-recommender/
-├── app.py                   ← Flask backend
-├── requirements.txt
-├── data/                    ← CSV database (7 files)
-│   ├── python_tutorials.csv
-│   ├── java_tutorials.csv
-│   ├── cpp_tutorials.csv
-│   ├── dsa_in_cpp.csv
-│   ├── dsa_in_java.csv
-│   ├── dsa_in_python__1_.csv
-│   └── c_datastructures_tutorials.csv
-└── static/                  ← Frontend
-    ├── index.html
-    ├── css/
-    │   └── style.css
-    └── js/
-        └── app.js
-```
+**SkillPath** is a high-end, multi-stage platform designed to transform your career journey. It goes beyond simple recommendations, offering a full-suite of tools including specialized learning paths, a brutal AI resume evaluator, and company-specific interview preparation.
 
 ---
 
-## 🚀 Quick Start (antigravity / pip)
+## ✨ Key Features
 
-### 1. Install dependencies
+### 1. 🧠 AI-Powered Skill Recommendations
+- **Multi-Step Flow**: Progress from curated YouTube playlists to professional certifications (Coursera, edX, etc.).
+- **Hybrid Search**: Instant results for core skills (Python, Java, C++, DSA) via local curated datasets, with smart fallback to **Groq (Llama-3.3 70B)** for everything else.
+- **Smart Filtering**: Results matched to your experience level (Beginner, Intermediate, Advanced).
 
-```bash
-cd skill-recommender
-pip install antigravity   # just kidding 😄
-pip install -r requirements.txt
-```
+### 2. 🛡️ Elite AI Resume Evaluator
+- **Brutal Feedback**: Simulates a high-pressure FAANG hiring process.
+- **ATS Simulation**: Keyword matching and pass probability scoring.
+- **Deep Analysis**: Breaks down projects, differentiation, and domain alignment.
+- **Actionable Plans**: Provides specific project ideas and bullet points to upgrade your resume.
 
-### 2. Set your Anthropic API key
+### 3. 🎯 Company-Specific Interview Prep
+- **LeetCode Frequency**: Access topic-wise frequency of questions asked at top tech companies.
+- **Direct Links**: Practice directly on LeetCode with one-click navigation.
+- **Data-Driven**: Leverages curated CSV data for accurate interview insights.
 
-**Windows (PowerShell):**
-```powershell
-$env:ANTHROPIC_API_KEY = "sk-ant-xxxxxxxxxxxx"
-```
-
-**Mac / Linux:**
-```bash
-export ANTHROPIC_API_KEY="sk-ant-xxxxxxxxxxxx"
-```
-
-Or create a `.env` file (optional — see note below).
-
-### 3. Run the server
-
-```bash
-python app.py
-```
-
-Open your browser at: **http://localhost:5000**
-
----
-
-## 🧠 How It Works
-
-| Step | Action |
-|------|--------|
-| 1 | User enters a skill + level |
-| 2 | Backend normalises & matches against 7 CSV files |
-| 3 | If match → returns top 10 from CSV instantly |
-| 4 | If no match → calls Claude AI (LLM fallback) |
-| 5 | Returns strict JSON array of 10 resources |
-
----
-
-## 🎯 Skills Covered by Local CSV
-
-| Skill | Levels Available |
-|-------|-----------------|
-| Python | Beginner → Advanced |
-| Java | Beginner → Advanced |
-| C++ | Beginner → Advanced |
-| DSA in C++ | Beginner → Advanced |
-| DSA in Java | Beginner → Advanced |
-| DSA in Python | Beginner → Intermediate |
-| C Data Structures | Beginner → Intermediate |
-
-Any other skill (React, Node.js, Machine Learning, etc.) → **AI fallback**.
-
----
-
-## 🔌 API Reference
-
-### `POST /get-resource`
-
-**Request:**
-```json
-{ "skill": "Python", "level": "Beginner" }
-```
-
-**Response:**
-```json
-[
-  {
-    "rank": 1,
-    "title": "Python Tutorial for Beginners",
-    "channel": "Corey Schafer",
-    "type": "playlist",
-    "level": "Beginner",
-    "duration_hours": "9",
-    "url": "https://www.youtube.com/playlist?list=...",
-    "description": "..."
-  }
-]
-```
-
----
-
-## ⚙️ Environment Variables
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `ANTHROPIC_API_KEY` | Only for LLM fallback | Your Anthropic API key |
+### 4. 🔒 Enterprise-Grade Security & Safety
+- **Content Moderation**: Real-time filtering of inappropriate or harmful search terms.
+- **Privacy First**: Local file processing for resume parsing.
 
 ---
 
 ## 🛠 Tech Stack
 
-- **Backend:** Flask + pandas + Anthropic SDK
-- **Frontend:** Vanilla HTML/CSS/JS (no build step needed)
-- **AI Model:** claude-opus-4-5 (fallback)
-- **Data:** 7 curated CSV files (70 total resources)
+- **Backend:** [Flask](https://flask.palletsprojects.com/) (Python) + Pandas
+- **AI Intelligence:** [Groq API](https://groq.com/) (Llama-3.3-70b-versatile)
+- **Frontend:** Nebula Design System (Vanilla HTML5, CSS3, Modern JavaScript)
+- **Parsing:** `pypdf`, `docx2txt` for high-fidelity resume extraction
+- **Data:** Custom curated CSV datasets for instant response times
+
+---
+
+## 📁 Project Structure
+
+```text
+skill-recommender/
+├── app.py                   # Flask backend & AI Logic
+├── requirements.txt         # Project dependencies
+├── .env                     # API Keys & Configuration
+├── data/                    # Curated Databases
+│   ├── leetcode/            # Company-specific CSVs
+│   ├── certifications/      # Professional course data
+│   └── *.csv                # Local skill tutorials
+└── static/                  # Nebula UI Frontend
+    ├── index.html           # Main SPA layout
+    ├── css/style.css        # Premium aesthetics & animations
+    └── js/app.js            # Frontend orchestration
+```
+
+---
+
+## 🚀 Getting Started
+
+### 1. Requirements
+Ensure you have Python 3.8+ installed.
+
+### 2. Installation
+```bash
+# Clone the repository
+git clone <your-repo-url>
+cd skill-recommender
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### 3. Configuration
+Create a `.env` file in the root directory and add your Groq API key:
+```env
+GROQ_API_KEY=your_groq_api_key_here
+```
+
+### 4. Run the Application
+```bash
+python app.py
+```
+Open your browser and navigate to: `http://localhost:5000`
+
+---
+
+## 🖇 API Endpoints
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `POST` | `/get-resource` | Fetches learning resources (Playlists + Certs) |
+| `POST` | `/analyze-resume` | Triggers the Elite AI Resume Evaluation |
+| `GET` | `/get-companies` | Lists all available companies for interview prep |
+| `GET` | `/get-questions` | Fetches specific questions for a company |
+
+---
+
+## 🎨 Design Philosophy
+SkillPath uses the **Nebula Design System**—a modern aesthetic focusing on:
+- **Glassmorphism**: Sleek, semi-transparent UI elements.
+- **Micro-animations**: Dynamic hover states and smooth transitions.
+- **Accessibility**: Clear typography and high-contrast color palettes.
+
+---
+
+*Built with ❤️ for the next generation of engineers.*

@@ -367,9 +367,18 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Verdict Pill
         const verdictPill = document.getElementById('res-verdict-pill');
-        const verdict = data.recruiter_snap_judgment?.verdict || 'REJECT';
-        verdictPill.textContent = verdict;
-        verdictPill.className = `decision-pill ${verdict.toLowerCase().includes('shortlist') ? 'select' : 'reject'}`;
+        const hireVerdict = data.hire_verdict || 'No Hire';
+        verdictPill.textContent = hireVerdict.toUpperCase();
+        
+        // Dynamic styling for Hire Verdict
+        verdictPill.className = 'decision-pill';
+        if (hireVerdict.toLowerCase().includes('hire') && !hireVerdict.toLowerCase().includes('no')) {
+            verdictPill.classList.add('select');
+        } else if (hireVerdict.toLowerCase().includes('borderline')) {
+            verdictPill.classList.add('borderline'); // We'll add this CSS if needed
+        } else {
+            verdictPill.classList.add('reject');
+        }
 
         // Section Summaries
         document.getElementById('res-brutal-summary').textContent = data.brutal_analysis?.summary || '';
