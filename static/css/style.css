@@ -439,6 +439,95 @@ body {
   font-size: 1.1rem;
 }
 
+/* ── PROGRESS SUMMARY (DASHBOARD) ── */
+.progress-container {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 24px;
+    margin-bottom: 40px;
+    animation: fade-in 0.8s var(--smooth);
+}
+
+.progress-stats-card {
+    background: var(--bg-card);
+    backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    box-shadow: var(--shadow-main);
+}
+
+.stat-circle {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    border: 6px solid rgba(99, 102, 241, 0.1);
+    border-top-color: var(--accent-p);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.stat-big-num {
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: var(--text-main);
+}
+
+.stat-subtext {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.progress-details-card {
+    background: var(--bg-card);
+    backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    padding: 32px;
+    box-shadow: var(--shadow-main);
+}
+
+.progress-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.company-breakdown {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.comp-stat-badge {
+    padding: 8px 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.comp-count {
+    font-weight: 700;
+    color: var(--accent-p);
+}
+
 /* ── TOAST ── */
 #toast {
   position: fixed;
@@ -513,7 +602,7 @@ body {
 /* ── LEFT STACK ── */
 .left-stack {
   position: absolute;
-  top: 60px;
+  top: 100px;
   left: 32px;
   display: flex;
   flex-direction: column;
@@ -618,6 +707,46 @@ body {
   color: var(--accent-b);
   font-weight: 700;
   margin-left: 8px;
+}
+
+.other-companies-wrap {
+    margin-top: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.other-comp-tag {
+    font-size: 0.65rem;
+    padding: 2px 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-muted);
+}
+
+.card-check-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    background: rgba(99, 102, 241, 0.05);
+    border-radius: 10px;
+    border: 1px solid rgba(99, 102, 241, 0.1);
+}
+
+.solve-checkbox {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    accent-color: var(--accent-p);
+}
+
+.solve-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-main);
 }
 
 /* ── INTERVIEW CATEGORIES ── */

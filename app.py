@@ -158,6 +158,41 @@ DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 CERT_DIR = os.path.join(DATA_DIR, "certifications")
 LEETCODE_DIR = os.path.join(DATA_DIR, "leetcode", "leetcode_companies")
 
+# Global Index: problem_link -> { 'name': str, 'companies': list }
+LEETCODE_INDEX: dict[str, dict] = {}
+
+def build_leetcode_index():
+    """Scans all company CSVs to build a global cross-reference index."""
+    if not os.path.exists(LEETCODE_DIR):
+        print("[WARN] LeetCode directory not found.")
+        return
+    
+    print("[INFO] Building LeetCode global index...")
+    for company in os.listdir(LEETCODE_DIR):
+        comp_path = os.path.join(LEETCODE_DIR, company)
+        if not os.path.isdir(comp_path): continue
+        
+        csv_path = os.path.join(comp_path, f"{company}.csv")
+        if os.path.exists(csv_path):
+            try:
+                df = pd.read_csv(csv_path)
+                for _, row in df.iterrows():
+                    link = str(row.get("problem_link", "")).strip()
+                    name = str(row.get("problem_name", "")).strip()
+                    if not link: continue
+                    
+                    if link not in LEETCODE_INDEX:
+                        LEETCODE_INDEX[link] = {"name": name, "companies": []}
+                    
+                    if company not in LEETCODE_INDEX[link]["companies"]:
+                        LEETCODE_INDEX[link]["companies"].append(company)
+            except Exception as e:
+                print(f"[WARN] Failed to index {company}: {e}")
+    print(f"[INFO] Index built: {len(LEETCODE_INDEX)} unique problems.")
+
+# Build index once
+build_leetcode_index()
+
 # Map normalised skill slug → DataFrame
 PLAYLIST_DB: dict[str, pd.DataFrame] = {}
 CERT_DB:     dict[str, pd.DataFrame] = {}
@@ -430,9 +465,29 @@ def get_questions():
     
     try:
         df = pd.read_csv(csv_path)
-        # Ensure column names match schema
-        # schema: problem_link, problem_name, num_occur
-        questions = df.to_dict(orient="records")
+        questions = []
+        for i, row in df.iterrows():
+            link = str(row.get("problem_link", "")).strip()
+            if not link: continue
+            
+            # Enrich with cross-company data from the global index
+            global_data = LEETCODE_INDEX.get(link, {})
+            other_companies = [c for c in global_data.get("companies", []) if str(c).lower() != str(company).lower()]
+            
+            # Coerce frequency to int (handle dirty data like 'Amazon' in Microsoft.csv)
+            raw_freq = row.get("num_occur", 0)
+            try:
+                freq = int(raw_freq)
+            except (ValueError, TypeError):
+                freq = 1  # Default to 1 if data is dirty
+            
+            questions.append({
+                "problem_link": link,
+                "problem_name": str(row.get("problem_name", "")).strip(),
+                "num_occur":    freq,
+                "other_companies": other_companies
+            })
+            
         return jsonify({"company": company, "questions": questions})
     except Exception as e:
         print(f"[ERROR] get-questions {company}: {e}")

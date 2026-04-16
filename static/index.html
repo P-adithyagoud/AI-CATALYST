@@ -51,11 +51,23 @@
             </div>
         </section>
 
-        <!-- Multi-Step Results -->
-        <main class="results-container">
-            <div id="loading" class="loading-indicator">
-                <div class="spinner"></div>
-                <p>Curating your personalized learning path...</p>
+            <!-- Dashboard Progress (Visible only on Dashboard home) -->
+            <div id="dashboard-progress" class="progress-container" style="display: none;">
+                <div class="progress-stats-card">
+                    <div class="stat-circle">
+                        <span id="total-solved-count" class="stat-big-num">0</span>
+                        <span class="stat-subtext">Solved</span>
+                    </div>
+                    <h4>Keep Going!</h4>
+                    <p class="step-desc">Mastering DSA takes consistency.</p>
+                </div>
+                <div class="progress-details-card">
+                    <h3 class="progress-title">🎯 Company-wise Mastery</h3>
+                    <div id="company-stats-grid" class="company-breakdown">
+                        <!-- Stat badges injected by JS -->
+                        <p class="empty-state" style="padding:0; font-size:0.9rem;">Solve questions to see company-wise stats here.</p>
+                    </div>
+                </div>
             </div>
 
             <!-- Tab Switcher -->
@@ -274,6 +286,10 @@
 
     <!-- Left Side Quick Access -->
     <div class="left-stack">
+        <button class="stack-btn" id="dashboard-btn" aria-label="Dashboard">
+            <span class="btn-icon">📊</span>
+            <span class="btn-label">Dashboard</span>
+        </button>
         <a href="https://roadmap.sh/" target="_blank" class="stack-btn" aria-label="Roadmaps">
             <span class="btn-icon">🗺️</span>
             <span class="btn-label">Roadmaps</span>

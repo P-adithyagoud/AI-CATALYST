@@ -153,6 +153,7 @@ document.addEventListener('DOMContentLoaded', () => {
         emptyState.style.display = 'none';
         playlistGrid.innerHTML = '';
         certificateGrid.innerHTML = '';
+        document.getElementById('dashboard-progress').style.display = 'none';
     };
 
     const setLoading = (isLoading) => {
@@ -279,6 +280,8 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        const solvedList = getSolvedQuestions();
+
         questions.forEach((q, index) => {
             const card = document.createElement('div');
             card.className = 'resource-card show';
@@ -286,20 +289,97 @@ document.addEventListener('DOMContentLoaded', () => {
             const name = q.problem_name || 'Unknown Problem';
             const link = q.problem_link || '#';
             const freq = q.num_occur || 0;
+            const others = q.other_companies || [];
+            const isSolved = solvedList.some(s => s.link === link);
 
             card.innerHTML = `
                 <div class="card-header">
                     <span class="rank-badge">#${index + 1}</span>
                     <span class="pill-badge">Freq: ${freq}</span>
                 </div>
+                <div class="card-check-wrap">
+                    <input type="checkbox" class="solve-checkbox" data-link="${link}" data-name="${escapeHTML(name)}" data-company="${escapeHTML(selectedCompanyTitle.textContent)}" ${isSolved ? 'checked' : ''}>
+                    <span class="solve-label">${isSolved ? '✅ Solved' : 'Mark as Solved'}</span>
+                </div>
                 <h3 class="card-title">${escapeHTML(name)}</h3>
-                <p class="card-desc">Practice this problem directly on LeetCode.</p>
+                
+                ${others.length > 0 ? `
+                   <div class="other-companies-wrap">
+                     <span style="font-size:0.65rem; color:var(--text-muted); width:100%;">Also found in:</span>
+                     ${others.slice(0, 5).map(c => `<span class="other-comp-tag">${escapeHTML(c)}</span>`).join('')}
+                     ${others.length > 5 ? `<span class="other-comp-tag">+${others.length - 5} more</span>` : ''}
+                   </div>
+                ` : ''}
+
+                <p class="card-desc" style="margin-top:16px;">Practice this problem directly on LeetCode.</p>
                 <a href="${link}" target="_blank" class="btn-watch" rel="noopener noreferrer">
                     Solve on LeetCode
                 </a>
             `;
+
+            // Handle checkbox click
+            const checkbox = card.querySelector('.solve-checkbox');
+            checkbox.addEventListener('change', (e) => {
+                toggleSolved(link, name, selectedCompanyTitle.textContent, e.target.checked);
+                card.querySelector('.solve-label').textContent = e.target.checked ? '✅ Solved' : 'Mark as Solved';
+            });
+
             questionsGrid.appendChild(card);
         });
+    };
+
+    /**
+     * Solved Questions State (LocalStorage)
+     */
+    const getSolvedQuestions = () => {
+        try {
+            return JSON.parse(localStorage.getItem('solved_dsa_questions')) || [];
+        } catch {
+            return [];
+        }
+    };
+
+    const toggleSolved = (link, name, company, isChecked) => {
+        let solved = getSolvedQuestions();
+        if (isChecked) {
+            if (!solved.find(s => s.link === link)) {
+                solved.push({ link, name, company, solvedAt: new Date().toISOString() });
+            }
+        } else {
+            solved = solved.filter(s => s.link !== link);
+        }
+        localStorage.setItem('solved_dsa_questions', JSON.stringify(solved));
+    };
+
+    const renderDashboardProgress = () => {
+        const dashboardProgress = document.getElementById('dashboard-progress');
+        const solvedCountUI = document.getElementById('total-solved-count');
+        const companyGridUI = document.getElementById('company-stats-grid');
+        
+        const solved = getSolvedQuestions();
+        
+        if (solved.length === 0) {
+            dashboardProgress.style.display = 'none';
+            return;
+        }
+
+        dashboardProgress.style.display = 'grid';
+        solvedCountUI.textContent = solved.length;
+
+        // Group by company
+        const companyStats = {};
+        solved.forEach(q => {
+            companyStats[q.company] = (companyStats[q.company] || 0) + 1;
+        });
+
+        companyGridUI.innerHTML = Object.entries(companyStats)
+            .sort((a, b) => b[1] - a[1])
+            .map(([comp, count]) => `
+                <div class="comp-stat-badge">
+                    <span>${escapeHTML(comp)}</span>
+                    <span class="comp-count">${count}</span>
+                </div>
+            `).join('');
     };
 
     // Real Resume Analysis logic
@@ -511,6 +591,22 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === 'Enter') handleSearch();
     });
 
+    const dashboardBtn = document.getElementById('dashboard-btn');
+    if (dashboardBtn) {
+        dashboardBtn.addEventListener('click', () => {
+            resetViews();
+            interviewPrepView.classList.remove('active');
+            emptyState.style.display = 'block';
+            skillInput.value = '';
+            // Close any open interview sub-views too
+            showSelectionScreen();
+            renderDashboardProgress();
+        });
+    }
+
     tabPlaylists.addEventListener('click', () => renderStep('playlists'));
     tabCertificates.addEventListener('click', () => renderStep('certificates'));
+
+    // Initial render
+    renderDashboardProgress();
 });
