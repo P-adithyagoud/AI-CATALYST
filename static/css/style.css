@@ -512,7 +512,7 @@ body {
 
 /* ── LEFT STACK ── */
 .left-stack {
-  position: fixed;
+  position: absolute;
   top: 60px;
   left: 32px;
   display: flex;
