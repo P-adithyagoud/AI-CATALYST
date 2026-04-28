@@ -5,10 +5,17 @@ load_dotenv()  # Load environment variables from .env file
 import json
 import re
 import io
+import uuid
+import requests
 import pandas as pd
+from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, request, jsonify, session, redirect, url_for
 from flask_cors import CORS
 from groq import Groq
+try:
+    from supabase import create_client, Client as SupabaseClient
+except ImportError:
+    SupabaseClient = None
 try:
     from pypdf import PdfReader
     import docx2txt
@@ -19,6 +26,131 @@ except ImportError:
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.secret_key = os.getenv("SECRET_KEY", "skillpath-dev-secret-key-2024")
 CORS(app)
+
+# ──────────────────────────────────────────────
+# Supabase Client (service role — bypasses RLS)
+# ──────────────────────────────────────────────
+_sb: SupabaseClient = None
+def get_sb():
+    global _sb
+    if _sb is None and SupabaseClient:
+        url = os.getenv("SUPABASE_URL", "")
+        key = os.getenv("SUPABASE_SERVICE_KEY", "")
+        if url and key:
+            try:
+                _sb = create_client(url, key)
+            except Exception as e:
+                print(f"[DB] Supabase init failed: {e}")
+    return _sb
+
+# ──────────────────────────────────────────────
+# DB Helper Functions
+# ──────────────────────────────────────────────
+def _skill_key(skill: str) -> str:
+    return re.sub(r'[^a-z0-9]', '_', skill.lower().strip())
+
+def db_get_cached_skill(skill: str):
+    """Step 1: Check DB cache first. Returns full response_data dict or None."""
+    try:
+        sb = get_sb()
+        if not sb: return None
+        key = _skill_key(skill)
+        res = sb.table("skills_cache").select("*").eq("skill_key", key).limit(1).execute()
+        if res.data:
+            row = res.data[0]
+            # Increment search counter asynchronously
+            sb.table("skills_cache").update({"total_searches": row["total_searches"] + 1}).eq("id", row["id"]).execute()
+            print(f"[DB] Cache HIT for '{skill}' (tier {row['tier']}, {row['total_searches']} searches)")
+            return {
+                "tier": 0,  # 0 = DB cache hit
+                "skill": skill,
+                "recommendations": row.get("recommendations"),
+                "fallback_playlists": row.get("fallback_playlists") or [],
+                "fallback_certs": row.get("fallback_certs") or [],
+                "roadmap": row.get("roadmap"),
+                "cache_hit": True,
+                "total_searches": row["total_searches"] + 1
+            }
+    except Exception as e:
+        print(f"[DB] Cache lookup failed: {e}")
+    return None
+
+def db_save_skill(skill: str, tier: int, source: str, response_data: dict):
+    """Step 5: Persist result to DB for future instant retrieval."""
+    try:
+        sb = get_sb()
+        if not sb: return
+        key = _skill_key(skill)
+        row = {
+            "skill_name": skill,
+            "skill_key": key,
+            "tier": tier,
+            "source_type": source,
+            "recommendations": response_data.get("recommendations"),
+            "fallback_playlists": response_data.get("fallback_playlists") or [],
+            "fallback_certs": response_data.get("fallback_certs") or [],
+            "roadmap": response_data.get("roadmap"),
+            "total_searches": 1
+        }
+        sb.table("skills_cache").upsert(row, on_conflict="skill_key").execute()
+        print(f"[DB] Saved '{skill}' to cache (tier={tier}, source={source})")
+    except Exception as e:
+        print(f"[DB] Save failed: {e}")
+
+def db_log_recommendation(skill: str, tier: int, source: str, data: dict, session_id: str = None):
+    """Step 5: Log every recommendation for analytics."""
+    try:
+        sb = get_sb()
+        if not sb: return
+        sb.table("recommendation_history").insert({
+            "skill_name": skill,
+            "tier": tier,
+            "source_type": source,
+            "recommendations_json": data,
+            "roadmap_generated": bool(data.get("roadmap")),
+            "session_id": session_id or "anonymous"
+        }).execute()
+    except Exception as e:
+        print(f"[DB] Log recommendation failed: {e}")
+
+def db_upsert_trust_score(resource_url: str, title: str, channel: str, skill: str):
+    """Initialize trust score for a new resource."""
+    try:
+        sb = get_sb()
+        if not sb: return
+        sb.table("trust_score_engine").upsert({
+            "resource_url": resource_url,
+            "resource_title": title,
+            "channel_name": channel,
+            "skill_name": skill,
+            "trust_score": 50.0,
+            "confidence_score": 50.0
+        }, on_conflict="resource_url").execute()
+    except Exception as e:
+        print(f"[DB] Trust score upsert failed: {e}")
+
+def db_adjust_trust_score(resource_url: str, action: str):
+    """Step 7: Auto-improve trust scores based on user actions."""
+    try:
+        sb = get_sb()
+        if not sb: return
+        res = sb.table("trust_score_engine").select("*").eq("resource_url", resource_url).limit(1).execute()
+        if not res.data: return
+        row = res.data[0]
+        delta_map = {"click": (+2, +1), "save": (+5, +3), "ignore": (-3, -2), "complete": (+10, +8)}
+        dt, dc = delta_map.get(action, (0, 0))
+        new_trust = max(0, min(100, row["trust_score"] + dt))
+        new_conf  = max(0, min(100, row["confidence_score"] + dc))
+        count_key = f"{action}_count"
+        new_count = row.get(count_key, 0) + 1
+        sb.table("trust_score_engine").update({
+            "trust_score": new_trust,
+            "confidence_score": new_conf,
+            count_key: new_count
+        }).eq("resource_url", resource_url).execute()
+        print(f"[DB] Trust score updated for {resource_url}: {row['trust_score']} → {new_trust}")
+    except Exception as e:
+        print(f"[DB] Trust score update failed: {e}")
 
 # ──────────────────────────────────────────────
 # 0. Resume Parsing Helpers
@@ -393,50 +525,332 @@ def llm_fallback(skill: str, level: str, language: str = "English", category: st
         return {"playlists": [], "certificates": []}
 
 # ──────────────────────────────────────────────
-# 5. Main endpoint
+# 4.5 AI Decision Engine Core
+# ──────────────────────────────────────────────
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
+
+def validate_url(url, source="csv"):
+    """Validates a URL. For CSV sources, performs HTTP check.
+    For YouTube API sources, trusts the API-issued ID (YouTube blocks HEAD requests)."""
+    if not url or not url.startswith("http"):
+        return False
+    
+    # YouTube API results: IDs are guaranteed valid by the API itself.
+    # YouTube blocks automated HEAD/GET requests so we validate by format only.
+    if source == "youtube_api":
+        import re
+        return bool(re.search(r'(list=[A-Za-z0-9_\-]{10,}|v=[A-Za-z0-9_\-]{10,})', url))
+    
+    # CSV sources: perform a real HTTP check to catch deleted/broken links
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+        res = requests.head(url, timeout=4, allow_redirects=True, headers=headers)
+        if res.status_code in [404, 400, 410]:
+            print(f"[VALIDATE] Broken CSV link ({res.status_code}): {url}")
+            return False
+        return True
+    except Exception as e:
+        print(f"[VALIDATE] CSV link check failed: {e} — {url}")
+        # On timeout/connection error, allow it through rather than false-reject
+        return True
+
+def fetch_youtube_playlists(skill, max_results=10):
+    if not YOUTUBE_API_KEY or YOUTUBE_API_KEY == "your_youtube_api_key_here":
+        print("[WARN] Invalid YouTube API Key")
+        return []
+    
+    url = "https://www.googleapis.com/youtube/v3/search"
+    params = {
+        "part": "snippet",
+        "q": f"{skill} full course tutorial playlist",
+        "type": "playlist",
+        "maxResults": max_results,
+        "key": YOUTUBE_API_KEY
+    }
+    try:
+        response = requests.get(url, params=params)
+        data = response.json()
+        results = []
+        for idx, item in enumerate(data.get("items", [])):
+            playlist_id = item["id"].get("playlistId")
+            if not playlist_id: continue
+            snippet = item.get("snippet", {})
+            results.append({
+                "id": f"yt_{idx}",
+                "title": snippet.get("title", ""),
+                "channel": snippet.get("channelTitle", ""),
+                "description": snippet.get("description", ""),
+                "url": f"https://www.youtube.com/playlist?list={playlist_id}"
+            })
+        return results
+    except Exception as e:
+        print(f"[ERROR] YouTube API fetch failed: {e}")
+        return []
+
+def analyze_and_rank_resources(youtube_data, skill, level):
+    client = Groq()
+    system_prompt = """You are an elite Tech Career Mentor and AI Recommendation Engine.
+I am providing you with a list of YouTube playlists fetched from the API for a specific skill. Each item has an 'id' (e.g., yt_0, yt_1).
+Your job is to analyze their titles, channels, and descriptions, and RANK them intelligently into 5 distinct categories.
+
+CRITICAL RULE: DO NOT INVENT URLs or TITLES. You MUST ONLY output the 'selected_id' from the provided list.
+
+RETURN EXACTLY THIS JSON STRUCTURE:
+{
+  "recommendations": {
+    "primary": { "selected_id": "yt_X", "confidence_score": 0, "trust_score": 0, "why_selected": "", "estimated_time": "", "expected_outcome": "" },
+    "fast_track": { "selected_id": "yt_X", "confidence_score": 0, "trust_score": 0, "why_selected": "", "estimated_time": "", "expected_outcome": "" },
+    "interview": { "selected_id": "yt_X", "confidence_score": 0, "trust_score": 0, "why_selected": "", "estimated_time": "", "expected_outcome": "" },
+    "project": { "selected_id": "yt_X", "confidence_score": 0, "trust_score": 0, "why_selected": "", "estimated_time": "", "expected_outcome": "" },
+    "advanced": { "selected_id": "yt_X", "confidence_score": 0, "trust_score": 0, "why_selected": "", "estimated_time": "", "expected_outcome": "" }
+  }
+}
+Do NOT return anything else. Ensure the JSON is valid."""
+
+    user_msg = f"Skill: {skill} ({level})\nYouTube Data: {json.dumps(youtube_data)}"
+    try:
+        completion = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_msg}],
+            temperature=0.1,
+            response_format={"type": "json_object"}
+        )
+        return json.loads(completion.choices[0].message.content.strip())
+    except Exception as e:
+        print(f"[ERROR] Groq ranking failed: {e}")
+        return None
+
+def generate_learning_path(skill, level):
+    client = Groq()
+    system_prompt = """You are an elite Tech Career Mentor.
+Generate a structured, step-by-step learning roadmap for the given skill.
+RETURN EXACTLY THIS JSON STRUCTURE:
+{
+  "roadmap": {
+    "beginner": ["Topic 1", "Topic 2", "Topic 3"],
+    "intermediate": ["Topic 1", "Topic 2", "Topic 3"],
+    "advanced": ["Topic 1", "Topic 2"],
+    "projects": [{"name": "", "description": ""}, {"name": "", "description": ""}],
+    "certifications": ["Cert 1", "Cert 2"],
+    "interview_prep": ["Prep step 1", "Prep step 2"]
+  }
+}
+Do NOT return anything else. Ensure the JSON is valid."""
+
+    user_msg = f"Skill: {skill} ({level})"
+    try:
+        completion = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_msg}],
+            temperature=0.3,
+            response_format={"type": "json_object"}
+        )
+        return json.loads(completion.choices[0].message.content.strip())
+    except Exception as e:
+        print(f"[ERROR] Groq roadmap failed: {e}")
+        return None
+
+# ──────────────────────────────────────────────
+# 5. Main endpoint — 7-Step AI Pipeline
 # ──────────────────────────────────────────────
 
 @app.route("/get-resource", methods=["POST"])
 def get_resource():
     body = request.get_json(silent=True) or {}
-    skill = (body.get("skill") or "").strip()
-    level = (body.get("level") or "Beginner").strip()
+    skill    = (body.get("skill") or "").strip()
+    level    = (body.get("level") or "Beginner").strip()
     language = (body.get("language") or "English").strip()
+    sid      = body.get("session_id") or session.get("session_id") or "anonymous"
 
     if not skill:
         return jsonify({"error": "skill is required"}), 400
-
-    # Content Moderation check
     if is_inappropriate(skill):
-        return jsonify({"error": "please kindly search appropiate skills"}), 400
+        return jsonify({"error": "please kindly search appropriate skills"}), 400
 
-    results = {"playlists": [], "certificates": []}
+    # ── STEP 1: DB Cache (fastest path — zero API cost) ───────────
+    cached = db_get_cached_skill(skill)
+    if cached:
+        cached["tier_label"] = "⚡ Instant Result: Retrieved from AI Memory"
+        return jsonify(cached)
 
-    # 1. Search Local Playlists
+    # ── STEP 2: CSV Check (curated trusted data) ──────────────────
     local_playlists = find_in_db(PLAYLIST_DB, skill, row_to_playlist, level=level)
-    results["playlists"] = local_playlists
 
-    # 2. Search Local Certificates
-    local_certs = find_in_db(CERT_DB, skill, row_to_cert)
-    results["certificates"] = local_certs
+    if local_playlists:
+        def validate_csv_playlists():
+            valid = []
+            for pl in local_playlists:
+                if validate_url(pl.get("url"), source="csv"):
+                    pl["verification_status"] = "✅ Verified via CSV"
+                    valid.append(pl)
+            return valid
 
-    # 3. Use AI if either is missing
-    missing_playlists = len(results["playlists"]) == 0
-    missing_certs     = len(results["certificates"]) == 0
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            future_playlists = executor.submit(validate_csv_playlists)
+            future_roadmap   = executor.submit(generate_learning_path, skill, level)
+            valid_local_playlists = future_playlists.result()
 
-    if missing_playlists or missing_certs:
-        category = "both"
-        if not missing_playlists: category = "certificates"
-        if not missing_certs:     category = "playlists"
-        
-        try:
-            ai_data = llm_fallback(skill, level, language=language, category=category)
-            if missing_playlists: results["playlists"] = ai_data.get("playlists", [])
-            if missing_certs:     results["certificates"] = ai_data.get("certificates", [])
-        except Exception as e:
-            print(f"[ERROR] LLM skip: {e}")
+        if valid_local_playlists:
+            certs = find_in_db(CERT_DB, skill, row_to_cert)
+            for cert in certs: cert["verification_status"] = "✅ Verified via CSV"
 
-    return jsonify(results)
+            response_data = {
+                "tier": 1, "skill": skill,
+                "tier_label": "🚀 Curated Result: Trusted CSV Dataset",
+                "recommendations": None,
+                "fallback_playlists": valid_local_playlists,
+                "fallback_certs": certs, "roadmap": None
+            }
+            try:
+                roadmap_data = future_roadmap.result(timeout=12)
+                if roadmap_data:
+                    response_data["roadmap"] = roadmap_data.get("roadmap")
+            except Exception as e:
+                print(f"[TIER1] Roadmap timed out: {e}")
+
+            # ── STEP 5: Save to DB + init trust scores ─────────────
+            def _persist():
+                db_save_skill(skill, 1, "csv", response_data)
+                db_log_recommendation(skill, 1, "csv", response_data, sid)
+                for pl in valid_local_playlists:
+                    db_upsert_trust_score(pl.get("url",""), pl.get("title",""), pl.get("channel",""), skill)
+            ThreadPoolExecutor(max_workers=1).submit(_persist)
+
+            return jsonify(response_data)
+
+    # ── STEP 3: YouTube API Fallback ──────────────────────────────
+    youtube_data = fetch_youtube_playlists(skill)
+    if not youtube_data:
+        return jsonify({"error": "No verified high-quality learning resource found for this skill yet."}), 404
+
+    # ── STEP 4: Groq AI Ranking + Roadmap (parallel) ─────────────
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        future_rank   = executor.submit(analyze_and_rank_resources, youtube_data, skill, level)
+        future_road   = executor.submit(generate_learning_path, skill, level)
+        ranking_data  = future_rank.result()
+        roadmap_data  = future_road.result()
+
+    final_recommendations = {}
+    if ranking_data and "recommendations" in ranking_data:
+        for cat, rank_info in ranking_data["recommendations"].items():
+            selected_id  = rank_info.get("selected_id")
+            verified_item = next((i for i in youtube_data if i["id"] == selected_id), None)
+            if not verified_item:
+                print(f"[TIER3] Unknown id '{selected_id}', using fallback.")
+                verified_item = youtube_data[0] if youtube_data else None
+            if not verified_item: continue
+            url = verified_item.get("url")
+            if validate_url(url, source="youtube_api"):
+                rank_info["title"]               = verified_item.get("title")
+                rank_info["channel"]             = verified_item.get("channel")
+                rank_info["url"]                 = url
+                rank_info["verification_status"] = "✅ Verified via YouTube API"
+                rank_info.pop("selected_id", None)
+                final_recommendations[cat]       = rank_info
+
+    response_data = {
+        "tier": 3, "skill": skill,
+        "tier_label": "🧠 AI-Ranked Result: Groq Intelligence Engine",
+        "recommendations": final_recommendations if final_recommendations else None,
+        "fallback_playlists": [],
+        "fallback_certs": [], "roadmap": None
+    }
+    if not final_recommendations:
+        for pl in youtube_data:
+            pl["verification_status"] = "✅ Verified via YouTube API"
+        response_data["fallback_playlists"] = youtube_data
+    if roadmap_data:
+        response_data["roadmap"] = roadmap_data.get("roadmap")
+
+    # ── STEP 5: Save to DB + init trust scores ────────────────────
+    def _persist_yt():
+        source = "ai_ranked" if final_recommendations else "youtube_api"
+        db_save_skill(skill, 3, source, response_data)
+        db_log_recommendation(skill, 3, source, response_data, sid)
+        all_resources = list(final_recommendations.values()) + response_data["fallback_playlists"]
+        for r in all_resources:
+            db_upsert_trust_score(r.get("url",""), r.get("title",""), r.get("channel",""), skill)
+    ThreadPoolExecutor(max_workers=1).submit(_persist_yt)
+
+    return jsonify(response_data)
+
+
+# ── STEP 6: Click / Save / Ignore Tracking ────────────────────────
+@app.route("/track-click", methods=["POST"])
+def track_click():
+    body         = request.get_json(silent=True) or {}
+    resource_url = (body.get("resource_url") or "").strip()
+    skill_name   = (body.get("skill_name") or "").strip()
+    resource_title = body.get("resource_title", "")
+    action       = body.get("action", "click")   # click | save | ignore | complete | roadmap_view
+    sid          = body.get("session_id") or "anonymous"
+
+    if not resource_url or not skill_name:
+        return jsonify({"error": "resource_url and skill_name required"}), 400
+    if action not in ("click", "save", "ignore", "complete", "roadmap_view"):
+        return jsonify({"error": "invalid action"}), 400
+
+    try:
+        sb = get_sb()
+        if sb:
+            # Log raw feedback
+            sb.table("user_feedback").insert({
+                "session_id": sid, "skill_name": skill_name,
+                "resource_url": resource_url, "resource_title": resource_title,
+                "action": action
+            }).execute()
+            # Step 7: Auto-adjust trust score
+            db_adjust_trust_score(resource_url, action)
+        return jsonify({"status": "ok", "action": action})
+    except Exception as e:
+        print(f"[TRACK] Failed: {e}")
+        return jsonify({"status": "error"}), 500
+
+
+# ── STEP 9: Brutal Mentor Mode ────────────────────────────────────
+@app.route("/mentor-mode", methods=["POST"])
+def mentor_mode():
+    body           = request.get_json(silent=True) or {}
+    goal           = (body.get("goal") or "").strip()
+    current_skills = (body.get("current_skills") or "").strip()
+
+    if not goal:
+        return jsonify({"error": "goal is required"}), 400
+
+    client = Groq()
+    system_prompt = """You are a brutally honest, elite Tech Career Mentor.
+Your job is to give harsh, direct, actionable career advice.
+Be specific. Call out wasted time. Redirect focus.
+Never be gentle. Be like a senior engineer who wants the person to actually succeed.
+
+RETURN EXACTLY THIS JSON:
+{
+  "verdict": "one harsh sentence about their current path",
+  "wasted_time": ["skill1", "skill2"],
+  "must_learn_now": [{"skill": "", "reason": ""}],
+  "priority_order": ["step1", "step2", "step3", "step4", "step5"],
+  "brutal_truth": "2-3 sentence reality check paragraph",
+  "action_this_week": "exact 1 thing they must do this week"
+}
+Return only valid JSON."""
+
+    try:
+        completion = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"My goal: {goal}\nMy current skills: {current_skills}"}
+            ],
+            temperature=0.4,
+            response_format={"type": "json_object"}
+        )
+        result = json.loads(completion.choices[0].message.content.strip())
+        return jsonify(result)
+    except Exception as e:
+        print(f"[MENTOR] Groq failed: {e}")
+        return jsonify({"error": "Mentor mode unavailable"}), 500
+
+
 
 # ──────────────────────────────────────────────
 # 6. Interview Prep (LeetCode)

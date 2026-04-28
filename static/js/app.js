@@ -29,9 +29,44 @@ document.addEventListener('DOMContentLoaded', () => {
     // Tabs
     const tabPlaylists = document.getElementById('tab-playlists');
     const tabCertificates = document.getElementById('tab-certificates');
+    const tabRoadmap = document.getElementById('tab-roadmap');
+    const tierLabelBadge = document.getElementById('tier-label-badge');
+
+    // Roadmap UI
+    const roadmapStep = document.getElementById('roadmap-step');
+    const roadmapContent = document.getElementById('roadmap-content');
+    
+    // AI Recommendations UI
+    const aiRecommendations = document.getElementById('ai-recommendations');
+    const aiRecommendationsGrid = document.getElementById('ai-recommendations-grid');
+    const tierIndicator = document.getElementById('tier-indicator');
+
+    // Session ID (anonymous tracking)
+    let sessionId = sessionStorage.getItem('sp_sid');
+    if (!sessionId) {
+        sessionId = 'sp_' + Math.random().toString(36).substr(2, 12);
+        sessionStorage.setItem('sp_sid', sessionId);
+    }
 
     // Local results store
-    let currentResults = { playlists: [], certificates: [] };
+    let currentSkill = '';
+    let currentResults = {};
+
+    // Silent click tracker
+    const trackClick = (url, title, action = 'click') => {
+        if (!url || url === '#') return;
+        fetch('/track-click', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                resource_url: url,
+                resource_title: title,
+                skill_name: currentSkill,
+                action,
+                session_id: sessionId
+            })
+        }).catch(() => {});
+    };
 
     /**
      * Handle Search
@@ -49,6 +84,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Reset UI
         setLoading(true);
         resetViews();
+        emptyState.innerHTML = `<p>Enter a skill above to generate your learning path.</p>`;
 
         try {
             const response = await fetch('/get-resource', {
@@ -65,10 +101,35 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             currentResults = data;
 
-            if ((!data.playlists || data.playlists.length === 0) && (!data.certificates || data.certificates.length === 0)) {
+            currentSkill = skill;
+
+            const hasPlaylists = data.fallback_playlists && data.fallback_playlists.length > 0;
+            const hasCerts = data.fallback_certs && data.fallback_certs.length > 0;
+            const hasRecommendations = data.recommendations;
+
+            if (!hasPlaylists && !hasCerts && !hasRecommendations) {
                 setLoading(false);
                 emptyState.style.display = 'block';
                 return;
+            }
+
+            // Tier label badge
+            if (tierLabelBadge) tierLabelBadge.textContent = data.tier_label || '';
+
+            if (data.tier === 0) {
+                tierIndicator.textContent = '⚡ Instant Result: Retrieved from AI Memory';
+            } else if (data.tier === 1) {
+                tierIndicator.textContent = '🚀 Curated Result: Trusted CSV Dataset';
+            } else if (data.tier >= 3) {
+                tierIndicator.textContent = '🧠 AI-Ranked Result: Groq Intelligence Engine';
+            } else {
+                tierIndicator.textContent = 'The best free curated playlists to build your foundation.';
+            }
+
+            if (data.roadmap) {
+                tabRoadmap.style.display = 'inline-block';
+            } else {
+                tabRoadmap.style.display = 'none';
             }
 
             // Show Navigation and Step 1
@@ -81,42 +142,125 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
         } catch (error) {
-            showToast(error.message);
+            if (error.message.includes("No verified high-quality")) {
+                emptyState.innerHTML = `<p style="color: var(--danger); font-size: 1.1rem; font-weight: 500;">❌ ${escapeHTML(error.message)}</p>`;
+            } else {
+                showToast(error.message);
+            }
             emptyState.style.display = 'block';
         } finally {
             setLoading(false);
         }
     };
 
+    const renderAIMentorCard = (category, data) => {
+        const card = document.createElement('div');
+        card.className = 'resource-card premium-card show';
+        const vStatus = data.verification_status ? `<span class="pill-badge" style="background: #059669; color: white; margin-left: auto;">${escapeHTML(data.verification_status)}</span>` : '';
+        card.innerHTML = `
+            <div class="card-header" style="flex-wrap: wrap;">
+                <span class="pill-badge" style="background: var(--gradient-primary); color: white;">${escapeHTML(category.toUpperCase())}</span>
+                <span class="pill-badge">Trust: ${data.trust_score || 90}/100</span>
+                ${vStatus}
+            </div>
+            <h3 class="card-title">${escapeHTML(data.title)}</h3>
+            <span class="channel-name">${escapeHTML(data.channel)}</span>
+            <p class="card-desc" style="margin-top: 10px;"><strong>💡 Why:</strong> ${escapeHTML(data.why_selected)}</p>
+            <p class="card-desc"><strong>⏱️ Time:</strong> ${escapeHTML(data.estimated_time)} | <strong>🎯 Outcome:</strong> ${escapeHTML(data.expected_outcome)}</p>
+            <a href="${data.url}" target="_blank" class="btn-watch" rel="noopener noreferrer"
+               style="background: var(--gradient-primary); border-color: transparent;"
+               onclick="trackClickGlobal('${data.url.replace(/'/g,"\\'")}',' ${escapeHTML(data.title).replace(/'/g,"\\'")}')">Watch Playlist</a>
+        `;
+        return card;
+    };
+
     /**
      * Render a specific view step
      */
     const renderStep = (step) => {
+        // Reset all
+        playlistStep.classList.remove('active');
+        certificateStep.classList.remove('active');
+        roadmapStep.classList.remove('active');
+        tabPlaylists.classList.remove('active');
+        tabCertificates.classList.remove('active');
+        tabRoadmap.classList.remove('active');
+
         if (step === 'playlists') {
             playlistGrid.innerHTML = '';
+            aiRecommendationsGrid.innerHTML = '';
             playlistStep.classList.add('active');
-            certificateStep.classList.remove('active');
             tabPlaylists.classList.add('active');
-            tabCertificates.classList.remove('active');
             
-            currentResults.playlists.forEach((item, index) => {
-                const card = createCard(item, index);
-                playlistGrid.appendChild(card);
-                setTimeout(() => card.classList.add('show'), index * 100);
-            });
+            if (currentResults.recommendations) {
+                aiRecommendations.style.display = 'block';
+                Object.entries(currentResults.recommendations).forEach(([category, data], index) => {
+                    if(data && data.url) {
+                        const card = renderAIMentorCard(category.replace('_', ' '), data);
+                        aiRecommendationsGrid.appendChild(card);
+                    }
+                });
+            } else {
+                aiRecommendations.style.display = 'none';
+            }
+
+            if (currentResults.fallback_playlists) {
+                currentResults.fallback_playlists.forEach((item, index) => {
+                    const card = createCard(item, index);
+                    playlistGrid.appendChild(card);
+                    setTimeout(() => card.classList.add('show'), (index + 2) * 100);
+                });
+            }
         } 
         else if (step === 'certificates') {
             certificateGrid.innerHTML = '';
             certificateStep.classList.add('active');
-            playlistStep.classList.remove('active');
             tabCertificates.classList.add('active');
-            tabPlaylists.classList.remove('active');
 
-            currentResults.certificates.forEach((item, index) => {
-                const card = createCard(item, index);
-                certificateGrid.appendChild(card);
-                setTimeout(() => card.classList.add('show'), index * 100);
-            });
+            if (currentResults.fallback_certs) {
+                currentResults.fallback_certs.forEach((item, index) => {
+                    const card = createCard(item, index);
+                    certificateGrid.appendChild(card);
+                    setTimeout(() => card.classList.add('show'), index * 100);
+                });
+            }
+        }
+        else if (step === 'roadmap') {
+            roadmapContent.innerHTML = '';
+            roadmapStep.classList.add('active');
+            tabRoadmap.classList.add('active');
+
+            const rm = currentResults.roadmap;
+            if (rm) {
+                roadmapContent.innerHTML = `
+                    <div class="roadmap-section">
+                        <h3>🌱 Beginner Phase</h3>
+                        <ul class="detailed-list">${(rm.beginner || []).map(i => `<li>${escapeHTML(i)}</li>`).join('')}</ul>
+                    </div>
+                    <div class="roadmap-section">
+                        <h3>🔥 Intermediate Phase</h3>
+                        <ul class="detailed-list">${(rm.intermediate || []).map(i => `<li>${escapeHTML(i)}</li>`).join('')}</ul>
+                    </div>
+                    <div class="roadmap-section">
+                        <h3>🚀 Advanced Phase</h3>
+                        <ul class="detailed-list">${(rm.advanced || []).map(i => `<li>${escapeHTML(i)}</li>`).join('')}</ul>
+                    </div>
+                    <div class="roadmap-section">
+                        <h3>🛠️ Projects to Build</h3>
+                        <div class="projects-mini-list">
+                            ${(rm.projects || []).map(p => `<div><strong>${escapeHTML(p.name || p.title || 'Project')}:</strong> ${escapeHTML(p.description || '')}</div>`).join('')}
+                        </div>
+                    </div>
+                    <div class="roadmap-section">
+                        <h3>🏆 Recommended Certifications</h3>
+                        <ul class="keyword-tags" style="display:flex; flex-wrap:wrap; gap:8px;">${(rm.certifications || []).map(c => `<li style="list-style:none;"><span class="pill-badge" style="background:#334155">${escapeHTML(c)}</span></li>`).join('')}</ul>
+                    </div>
+                    <div class="roadmap-section">
+                        <h3>💼 Interview Prep Focus</h3>
+                        <ul class="detailed-list">${(rm.interview_prep || []).map(i => `<li>${escapeHTML(i)}</li>`).join('')}</ul>
+                    </div>
+                `;
+            }
         }
     };
 
@@ -138,12 +282,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const isCert = !url.includes('youtube.com');
         const btnLabel = isCert ? 'Join Course' : 'Watch Playlist';
 
+        const vBadge = data.verification_status ? `<span class="pill-badge" style="background: #059669; color: white;">${escapeHTML(data.verification_status)}</span>` : '';
         card.innerHTML = `
-            <div class="card-header">
+            <div class="card-header" style="flex-wrap: wrap;">
                 <span class="rank-badge">#${rank}</span>
-                <div class="card-badges">
+                <div class="card-badges" style="display: flex; gap: 8px; flex-wrap: wrap;">
                     <span class="pill-badge">${escapeHTML(level)}</span>
                     <span class="pill-badge">${escapeHTML(duration)}</span>
+                    ${vBadge}
                 </div>
             </div>
             <h3 class="card-title">${escapeHTML(title)}</h3>
@@ -162,11 +308,14 @@ document.addEventListener('DOMContentLoaded', () => {
         resultsNav.style.display = 'none';
         playlistStep.classList.remove('active');
         certificateStep.classList.remove('active');
+        roadmapStep.classList.remove('active');
         if (recentSearchView) recentSearchView.classList.remove('active');
         if (recentSearchView) recentSearchView.style.display = 'none';
         emptyState.style.display = 'none';
         playlistGrid.innerHTML = '';
         certificateGrid.innerHTML = '';
+        aiRecommendationsGrid.innerHTML = '';
+        roadmapContent.innerHTML = '';
         document.getElementById('dashboard-progress').style.display = 'none';
     };
 
@@ -790,6 +939,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     tabPlaylists.addEventListener('click', () => renderStep('playlists'));
     tabCertificates.addEventListener('click', () => renderStep('certificates'));
+    tabRoadmap.addEventListener('click', () => renderStep('roadmap'));
 
     // Recent Searches Logic
     if (recentSearchBtn) {
@@ -846,4 +996,74 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initial render
     renderDashboardProgress();
+
+    // ── Mentor Mode Logic ─────────────────────────────────────────
+    const mentorBtn    = document.getElementById('mentor-mode-btn');
+    const mentorModal  = document.getElementById('mentor-modal');
+    const mentorClose  = document.getElementById('mentor-modal-close');
+    const mentorSubmit = document.getElementById('mentor-submit-btn');
+    const mentorResult = document.getElementById('mentor-result');
+
+    if (mentorBtn) mentorBtn.addEventListener('click', () => {
+        mentorModal.style.display = 'flex';
+        mentorResult.innerHTML = '';
+    });
+    if (mentorClose) mentorClose.addEventListener('click', () => {
+        mentorModal.style.display = 'none';
+    });
+    mentorModal.addEventListener('click', (e) => {
+        if (e.target === mentorModal) mentorModal.style.display = 'none';
+    });
+
+    if (mentorSubmit) mentorSubmit.addEventListener('click', async () => {
+        const goal   = document.getElementById('mentor-goal').value.trim();
+        const skills = document.getElementById('mentor-skills').value.trim();
+        if (!goal) { mentorResult.innerHTML = '<p style="color:#f97316">Please enter your career goal.</p>'; return; }
+
+        mentorSubmit.textContent = 'Consulting your mentor...';
+        mentorSubmit.disabled = true;
+        mentorResult.innerHTML = '<p style="color:#94a3b8; text-align:center;">⚡ Analyzing your path...</p>';
+
+        try {
+            const res  = await fetch('/mentor-mode', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ goal, current_skills: skills })
+            });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+
+            mentorResult.innerHTML = `
+                <div style="border-top:1px solid #1e293b; padding-top:16px;">
+                    <p style="color:#f97316; font-weight:700; font-size:1rem; margin-bottom:12px;">
+                        "${escapeHTML(data.verdict)}"
+                    </p>
+                    ${ data.wasted_time && data.wasted_time.length ? `
+                    <p style="color:#94a3b8; font-size:0.8rem; margin-bottom:4px;">⛔ Stop wasting time on:</p>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
+                        ${data.wasted_time.map(s => `<span class="pill-badge" style="background:#7f1d1d;color:#fca5a5;">${escapeHTML(s)}</span>`).join('')}
+                    </div>` : ''}
+                    ${ data.must_learn_now && data.must_learn_now.length ? `
+                    <p style="color:#94a3b8; font-size:0.8rem; margin-bottom:6px;">✅ Learn these NOW:</p>
+                    <ul style="padding-left:16px; color:#e2e8f0; font-size:0.85rem; margin-bottom:12px;">
+                        ${data.must_learn_now.map(i => `<li><strong>${escapeHTML(i.skill)}</strong> — ${escapeHTML(i.reason)}</li>`).join('')}
+                    </ul>` : ''}
+                    <p style="color:#94a3b8; font-size:0.85rem; line-height:1.6; margin-bottom:12px;">
+                        ${escapeHTML(data.brutal_truth)}
+                    </p>
+                    <div style="background:#0c4a6e; border-left:3px solid #38bdf8; padding:10px 14px; border-radius:8px;">
+                        <p style="color:#7dd3fc; font-size:0.8rem; margin:0;">🎯 This week: <strong>${escapeHTML(data.action_this_week)}</strong></p>
+                    </div>
+                </div>
+            `;
+        } catch(e) {
+            mentorResult.innerHTML = `<p style="color:#f87171;">Failed: ${escapeHTML(e.message)}</p>`;
+        } finally {
+            mentorSubmit.textContent = 'Get Brutal Advice ⚡';
+            mentorSubmit.disabled = false;
+        }
+    });
+
+    // Expose trackClick globally for inline onclick handlers
+    window.trackClickGlobal = (url, title) => trackClick(url, title, 'click');
 });
