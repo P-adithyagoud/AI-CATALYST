@@ -389,6 +389,17 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Recent Searches View -->
+            <div id="recent-search-view" class="results-step">
+                <div class="step-header">
+                    <h2 class="step-title">🕒 Recent Searches</h2>
+                    <p class="step-desc">A log of your recent queries powered by Supabase.</p>
+                </div>
+                <div id="recent-search-grid" class="results-grid" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
+                    <!-- Loaded dynamically -->
+                </div>
+            </div>
         </main>
     </div>
 
@@ -423,6 +434,15 @@
         <span class="ai-label">Ask AI Doubts</span>
     </a>
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        // Injecting ENV for Supabase
+        window.ENV = {
+            SUPABASE_URL: 'https://nvojuqjkvtxrglnzxkyx.supabase.co',
+            SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im52b2p1cWprdnR4cmdsbnp4a3l4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczNzE3NDksImV4cCI6MjA5Mjk0Nzc0OX0.TeAd5SeuPE-fkR9iGq8CrAkKwu240pG_veFHhR8sSrc'
+        };
+    </script>
+    <script src="/static/js/supabaseClient.js"></script>
     <script src="/static/js/app.js"></script>
 </body>
 </html>

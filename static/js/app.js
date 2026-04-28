@@ -21,6 +21,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const playlistGrid = document.getElementById('playlist-grid');
     const certificateGrid = document.getElementById('certificate-grid');
 
+    // Recent Searches
+    const recentSearchBtn = document.getElementById('recent-search-btn');
+    const recentSearchView = document.getElementById('recent-search-view');
+    const recentSearchGrid = document.getElementById('recent-search-grid');
+
     // Tabs
     const tabPlaylists = document.getElementById('tab-playlists');
     const tabCertificates = document.getElementById('tab-certificates');
@@ -69,6 +74,11 @@ document.addEventListener('DOMContentLoaded', () => {
             // Show Navigation and Step 1
             resultsNav.style.display = 'flex';
             renderStep('playlists');
+
+            // Save to Supabase (fire and forget)
+            if (window.db && window.db.saveSearch) {
+                window.db.saveSearch(skill, level, language);
+            }
 
         } catch (error) {
             showToast(error.message);
@@ -152,6 +162,8 @@ document.addEventListener('DOMContentLoaded', () => {
         resultsNav.style.display = 'none';
         playlistStep.classList.remove('active');
         certificateStep.classList.remove('active');
+        if (recentSearchView) recentSearchView.classList.remove('active');
+        if (recentSearchView) recentSearchView.style.display = 'none';
         emptyState.style.display = 'none';
         playlistGrid.innerHTML = '';
         certificateGrid.innerHTML = '';
@@ -778,6 +790,59 @@ document.addEventListener('DOMContentLoaded', () => {
 
     tabPlaylists.addEventListener('click', () => renderStep('playlists'));
     tabCertificates.addEventListener('click', () => renderStep('certificates'));
+
+    // Recent Searches Logic
+    if (recentSearchBtn) {
+        recentSearchBtn.addEventListener('click', async () => {
+            resetViews();
+            interviewPrepView.classList.remove('active');
+            
+            recentSearchView.style.display = 'block';
+            recentSearchView.classList.add('active');
+            recentSearchGrid.innerHTML = '<div class="loading-indicator" style="display:block;"><div class="spinner"></div><p>Fetching recent searches...</p></div>';
+
+            try {
+                if (window.db && window.db.getRecentSearches) {
+                    const searches = await window.db.getRecentSearches(12);
+                    recentSearchGrid.innerHTML = '';
+                    
+                    if (!searches || searches.length === 0) {
+                        recentSearchGrid.innerHTML = '<p class="empty-state">No recent searches found in database.</p>';
+                        return;
+                    }
+                    
+                    searches.forEach(s => {
+                        const card = document.createElement('div');
+                        card.className = 'resource-card show';
+                        card.style.cursor = 'pointer';
+                        card.innerHTML = `
+                            <div class="card-header">
+                                <span class="pill-badge">${escapeHTML(s.level || 'Beginner')}</span>
+                                <span class="pill-badge" style="background:rgba(255,255,255,0.1)">${escapeHTML(s.language || 'English')}</span>
+                            </div>
+                            <h3 class="card-title">${escapeHTML(s.query)}</h3>
+                            <span class="channel-name">Searched recently</span>
+                        `;
+                        
+                        // Click to search again
+                        card.addEventListener('click', () => {
+                            skillInput.value = s.query;
+                            levelDropdown.value = s.level || 'Beginner';
+                            languageDropdown.value = s.language || 'English';
+                            handleSearch();
+                        });
+                        
+                        recentSearchGrid.appendChild(card);
+                    });
+                } else {
+                    recentSearchGrid.innerHTML = '<p class="empty-state">Supabase client not initialized.</p>';
+                }
+            } catch (err) {
+                recentSearchGrid.innerHTML = '<p class="empty-state" style="color:var(--danger)">Failed to fetch searches.</p>';
+                console.error(err);
+            }
+        });
+    }
 
     // Initial render
     renderDashboardProgress();
