@@ -6,7 +6,7 @@ import json
 import re
 import io
 import pandas as pd
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, session, redirect, url_for
 from flask_cors import CORS
 from groq import Groq
 try:
@@ -17,6 +17,7 @@ except ImportError:
     docx2txt = None
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
+app.secret_key = os.getenv("SECRET_KEY", "skillpath-dev-secret-key-2024")
 CORS(app)
 
 # ──────────────────────────────────────────────
@@ -490,8 +491,66 @@ def get_questions():
         print(f"[ERROR] get-questions {company}: {e}")
         return jsonify({"error": str(e)}), 500
 
+# ──────────────────────────────────────────────
+# 7. Auth Routes
+# ──────────────────────────────────────────────
+
+@app.route("/login-page")
+def login_page():
+    if session.get("logged_in"):
+        return redirect("/")
+    return app.send_static_file("login.html")
+
+@app.route("/login", methods=["POST"])
+def login():
+    data     = request.get_json(silent=True) or {}
+    email    = (data.get("email") or "").strip()
+    password = (data.get("password") or "").strip()
+
+    if not email or not password:
+        return jsonify({"error": "Email and password are required."}), 400
+
+    # For demo: accept any valid email + password with 6+ chars
+    import re
+    if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+        return jsonify({"error": "Invalid email address."}), 400
+    if len(password) < 6:
+        return jsonify({"error": "Password must be at least 6 characters."}), 400
+
+    session["logged_in"] = True
+    session["user_email"] = email
+    return jsonify({"success": True})
+
+@app.route("/signup", methods=["POST"])
+def signup():
+    data     = request.get_json(silent=True) or {}
+    name     = (data.get("name") or "").strip()
+    email    = (data.get("email") or "").strip()
+    password = (data.get("password") or "").strip()
+
+    if not name or not email or not password:
+        return jsonify({"error": "All fields are required."}), 400
+
+    import re
+    if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+        return jsonify({"error": "Invalid email address."}), 400
+    if len(password) < 6:
+        return jsonify({"error": "Password must be at least 6 characters."}), 400
+
+    session["logged_in"] = True
+    session["user_email"] = email
+    session["user_name"]  = name
+    return jsonify({"success": True})
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/login-page")
+
 @app.route("/")
 def index():
+    if not session.get("logged_in"):
+        return redirect("/login-page")
     return app.send_static_file("index.html")
 
 if __name__ == "__main__":
