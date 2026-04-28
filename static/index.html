@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SkillRecommender — Curated YouTube Playlists</title>
+    <!-- SEO -->
+    <meta name="description" content="Discover the top 10 curated YouTube playlists for any skill. Premium AI-powered recommendations for beginners to advanced learners.">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+    <!-- Premium Background -->
+    <div class="bg-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+    </div>
+
+    <div class="container">
+        <!-- Hero Section -->
+        <header class="hero">
+            <h1 class="hero-title">
+                Learn the Right Things. <span class="gradient">Faster.</span>
+            </h1>
+            <p class="hero-subtitle">
+                We surface the highest-quality YouTube courses for any skill and level.
+            </p>
+        </header>
+
+        <main>
+        <!-- Search Panel -->
+        <section class="search-panel">
+            <div class="search-form" id="search-form">
+                <div class="input-group">
+                    <input 
+                        type="text" 
+                        id="skill-input" 
+                        class="skill-input" 
+                        placeholder="What do you want to learn?" 
+                        aria-label="Skill to learn"
+                        autocomplete="off"
+                    >
+                </div>
+                <select id="level-dropdown" class="level-dropdown" aria-label="Skill level">
+                    <option value="Beginner">🌱 Beginner</option>
+                    <option value="Intermediate">🔥 Intermediate</option>
+                    <option value="Advanced">🚀 Advanced</option>
+                </select>
+                <select id="language-dropdown" class="level-dropdown" aria-label="Learning language">
+                    <option value="English">🇺🇸 English</option>
+                    <option value="Hindi">🇮🇳 Hindi</option>
+                    <option value="Telugu">🇮🇳 Telugu</option>
+                </select>
+                <button id="cta-button" class="cta-button">
+                    Find Resources
+                </button>
+            </div>
+        </section>
+
+            <!-- Loading Indicator -->
+            <div id="loading" class="loading-indicator">
+                <div class="spinner"></div>
+                <p>Curating the best resources for you...</p>
+            </div>
+
+            <!-- Dashboard Progress (Visible only on Dashboard home) -->
+            <div id="dashboard-progress" class="progress-container" style="display: none;">
+                <div class="progress-stats-card">
+                    <div class="stat-circle">
+                        <span id="total-solved-count" class="stat-big-num">0</span>
+                        <span class="stat-subtext">Solved</span>
+                    </div>
+                    <h4>Keep Going!</h4>
+                    <p class="step-desc">Mastering DSA takes consistency.</p>
+                </div>
+                <div class="progress-details-card">
+                    <h3 class="progress-title">🎯 Company-wise Mastery</h3>
+                    <div id="company-stats-grid" class="company-breakdown">
+                        <!-- Stat badges injected by JS -->
+                        <p class="empty-state" style="padding:0; font-size:0.9rem;">Solve questions to see company-wise stats here.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Switcher -->
+            <div id="results-nav" class="results-tabs" style="display: none;">
+                <button id="tab-playlists" class="tab-btn active">📺 Resources</button>
+                <button id="tab-certificates" class="tab-btn">🏆 Certifications</button>
+            </div>
+
+            <!-- View Step 1: YouTube Playlists -->
+            <div id="playlist-step" class="results-step active">
+                <div class="step-header">
+                    <h2 class="step-title">📺 Step 1: Core Video Resources</h2>
+                    <p class="step-desc">The best free curated playlists to build your foundation.</p>
+                </div>
+                <div id="playlist-grid" class="results-grid"></div>
+            </div>
+
+            <div id="certificate-step" class="results-step">
+                <div id="certificate-grid" class="results-grid"></div>
+            </div>
+
+            <div id="empty-state" class="empty-state">
+                <p>Enter a skill above to generate your learning path.</p>
+            </div>
+
+            <!-- Interview Prep View -->
+            <div id="interview-prep-view" class="results-step">
+                <div class="step-header">
+                    <h2 class="step-title">💼 Step 3: Interview Preparation</h2>
+                    <p class="step-desc">Master your interviews with targeted preparation.</p>
+                </div>
+
+                <!-- Category Selection -->
+                <div id="interview-categories" class="interview-categories">
+                    <div class="category-card" id="btn-dsa-category">
+                        <div class="category-icon">🧠</div>
+                        <h3 class="category-name">DSA Preparation</h3>
+                        <p class="category-desc">Targeted LeetCode questions for top tech companies.</p>
+                    </div>
+                    <div class="category-card" id="btn-resume-category">
+                        <div class="category-icon">📄</div>
+                        <h3 class="category-name">Resume Analyzer</h3>
+                        <p class="category-desc">AI-powered mockup to optimize your resume impact.</p>
+                    </div>
+                </div>
+                
+                <!-- DSA Category View -->
+                <div id="dsa-prep-content" style="display: none;">
+                    <button class="btn-back" id="back-to-categories-dsa">← Categories</button>
+                    
+                    <!-- Company Selector -->
+                    <div id="company-selection" class="company-selection">
+                        <div class="company-search-box">
+                            <input type="text" id="company-search" placeholder="Search for a company (e.g. Google, Amazon)..." class="skill-input">
+                        </div>
+                        <div id="companies-grid" class="companies-grid">
+                            <!-- Loaded dynamically -->
+                        </div>
+                    </div>
+
+                    <!-- Questions List -->
+                    <div id="questions-view" class="questions-view" style="display: none;">
+                        <button id="back-to-companies" class="btn-back">← Back to Companies</button>
+                        <h3 id="selected-company-title" class="company-title">Company Name</h3>
+                        <div id="questions-grid" class="results-grid">
+                            <!-- Loaded dynamically -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Resume Analyzer View -->
+                <div id="resume-analyzer-content" style="display: none;">
+                    <button class="btn-back" id="back-to-categories-resume">← Categories</button>
+                    
+                    <div class="resume-analyzer-ui">
+                        <!-- Inputs for Role & Level -->
+                        <div class="resume-meta-inputs" id="resume-meta-inputs">
+                            <div class="input-group">
+                                <label class="input-label">Target Role</label>
+                                <input type="text" id="target-role" class="skill-input" placeholder="e.g. Software Engineer, Data Scientist">
+                            </div>
+                            <div class="input-group">
+                                <label class="input-label">Benchmark Standard</label>
+                                <select id="target-benchmark" class="level-dropdown">
+                                    <option value="FAANG">FAANG / Top Tier</option>
+                                    <option value="Tier-1 Startup">Tier-1 Startup</option>
+                                    <option value="Average Company" selected>Average Company</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="upload-zone" id="upload-zone">
+                            <div class="upload-icon">📤</div>
+                            <h3>Upload your Resume</h3>
+                            <p>Drag and drop your PDF or DOCX file here, or click to browse.</p>
+                            <input type="file" id="resume-upload" hidden accept=".pdf,.doc,.docx">
+                            <button class="cta-button" id="btn-trigger-upload" style="margin-top: 20px;">
+                                Analyze Resume
+                            </button>
+                        </div>
+
+                        <div id="analysis-status" class="analysis-status" style="display: none;">
+                            <div class="spinner"></div>
+                            <p id="status-text">Scanning for keywords...</p>
+                        </div>
+
+                        <!-- Real Analysis Results -->
+                        <div id="analysis-results" class="analysis-results" style="display: none;">
+                            <div class="results-header">
+                                <div class="decision-wrap">
+                                    <div class="score-meta">
+                                        <h3 id="res-score-value" class="score-value">0/10</h3>
+                                        <span id="res-market" class="confidence-tag">Market: Top 5%</span>
+                                    </div>
+                                    <div class="verdict-pill-wrap">
+                                        <span id="res-verdict-pill" class="decision-pill">SHORTLIST</span>
+                                    </div>
+                                </div>
+                                <div class="verdict-box">
+                                    <p id="res-brutal-summary" class="verdict-text"></p>
+                                </div>
+                            </div>
+
+                            <div class="detailed-analysis-grid">
+                                <!-- STAGE 1: ATS -->
+                                <div class="analysis-section ats-section">
+                                    <h4>🤖 STAGE 1: ATS Simulation</h4>
+                                    <div class="ats-stats">
+                                        <div class="stat-item">
+                                            <span class="stat-label">Keyword Match</span>
+                                            <span id="res-ats-match" class="stat-value">0%</span>
+                                        </div>
+                                        <div class="stat-item">
+                                            <span class="stat-label">Pass Probability</span>
+                                            <span id="res-ats-prob" class="stat-value">High</span>
+                                        </div>
+                                    </div>
+                                    <div class="ats-keywords">
+                                        <p class="sub-label">Missing Critical Keywords:</p>
+                                        <ul id="res-ats-missing" class="keyword-tags"></ul>
+                                    </div>
+                                </div>
+
+                                <!-- STAGE 2: RECRUITER -->
+                                <div class="analysis-section recruiter-section">
+                                    <h4>👀 STAGE 2: Recruiter Scan (10s)</h4>
+                                    <p id="res-recruiter-impression" class="text-block italic"></p>
+                                    <div class="recruiter-reasons">
+                                        <p class="sub-label">Top Reasons:</p>
+                                        <ul id="res-recruiter-reasons" class="detailed-list"></ul>
+                                    </div>
+                                </div>
+
+                                <!-- STAGE 3: HIRING MANAGER TABLE -->
+                                <div class="analysis-section hm-section">
+                                    <h4>👨‍💼 STAGE 3: Deep Evaluation</h4>
+                                    <div class="table-container">
+                                        <table class="evaluation-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Category</th>
+                                                    <th>Weight</th>
+                                                    <th>Score</th>
+                                                    <th>Reasoning</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="res-hm-table">
+                                                <!-- Rows injected by JS -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <!-- Action Plan & Rewrites -->
+                                <div class="analysis-section action-plan-section">
+                                    <h4>📋 Strategic Action Plan</h4>
+                                    <div class="action-grid">
+                                        <div class="action-box">
+                                            <h5>🚀 Proposed Projects</h5>
+                                            <div id="res-action-projects" class="projects-mini-list"></div>
+                                        </div>
+                                        <div class="action-box">
+                                            <h5>🛠️ Tools to Master</h5>
+                                            <ul id="res-action-tools" class="keyword-tags"></ul>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="analysis-section rewrites-section">
+                                    <h4>✨ Professional Rewrites</h4>
+                                    <div id="res-action-rewrites" class="rewrites-container"></div>
+                                </div>
+
+                                <div class="analysis-section-group">
+                                    <div class="analysis-section">
+                                        <h4>📉 Rejection Risk</h4>
+                                        <p id="res-risk-text" class="text-block warn"></p>
+                                    </div>
+                                    <div class="analysis-section">
+                                        <h4>🌟 What Works</h4>
+                                        <ul id="res-works-list" class="detailed-list"></ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Error Toast -->
+    <div id="toast" role="alert">
+        <span id="toast-message">Oops! Something went wrong.</span>
+    </div>
+
+    <!-- Left Side Quick Access -->
+    <div class="left-stack">
+        <button class="stack-btn" id="dashboard-btn" aria-label="Dashboard">
+            <span class="btn-icon">📊</span>
+            <span class="btn-label">Dashboard</span>
+        </button>
+        <a href="https://roadmap.sh/" target="_blank" class="stack-btn" aria-label="Roadmaps">
+            <span class="btn-icon">🗺️</span>
+            <span class="btn-label">Roadmaps</span>
+        </a>
+        <button class="stack-btn" id="interview-prep-btn" aria-label="Interview Prep">
+            <span class="btn-icon">💼</span>
+            <span class="btn-label">Interview Prep</span>
+        </button>
+        <button class="stack-btn" id="recent-search-btn" aria-label="Recent Searched">
+            <span class="btn-icon">🕒</span>
+            <span class="btn-label">Recent Searched</span>
+        </button>
+    </div>
+
+    <!-- AI Assistant FAB -->
+    <a href="https://hackathon-for-ai-agent.vercel.app/" target="_blank" class="ai-assistant-fab" aria-label="Ask AI Assistant">
+        <span class="ai-icon">✨</span>
+        <span class="ai-label">Ask AI Doubts</span>
+    </a>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
