@@ -6,6 +6,8 @@
     <title>SkillRecommender — Curated YouTube Playlists</title>
     <!-- SEO -->
     <meta name="description" content="Discover the top 10 curated YouTube playlists for any skill. Premium AI-powered recommendations for beginners to advanced learners.">
+    <!-- Chart.js for Advanced Analytics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
@@ -65,19 +67,90 @@
 
             <!-- Dashboard Progress (Visible only on Dashboard home) -->
             <div id="dashboard-progress" class="progress-container" style="display: none;">
-                <div class="progress-stats-card">
-                    <div class="stat-circle">
-                        <span id="total-solved-count" class="stat-big-num">0</span>
-                        <span class="stat-subtext">Solved</span>
+                <!-- 1. HERO SECTION -->
+                <div class="dsa-hero">
+                    <div class="dsa-hero-text">
+                        <h1 class="dsa-title">DSA Command Center 🚀</h1>
+                        <p class="dsa-subtitle">Track. Solve. Improve. Dominate.</p>
                     </div>
-                    <h4>Keep Going!</h4>
-                    <p class="step-desc">Mastering DSA takes consistency.</p>
+                    <div class="dsa-hero-progress">
+                        <div class="progress-label-row">
+                            <span>Level Progress</span>
+                            <span id="level-progress-text">0 / 500 Mastered</span>
+                        </div>
+                        <div class="dsa-progress-bar-wrap">
+                            <div id="dsa-main-progress" class="dsa-progress-bar" style="width: 0%"></div>
+                        </div>
+                    </div>
                 </div>
-                <div class="progress-details-card">
-                    <h3 class="progress-title">🎯 Company-wise Mastery</h3>
-                    <div id="company-stats-grid" class="company-breakdown">
-                        <!-- Stat badges injected by JS -->
-                        <p class="empty-state" style="padding:0; font-size:0.9rem;">Solve questions to see company-wise stats here.</p>
+
+                <!-- 2. KPI CARDS -->
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-icon">📝</div>
+                        <div class="kpi-data">
+                            <h3>Total Solved</h3>
+                            <div class="kpi-value" id="kpi-completed">0</div>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon">🎯</div>
+                        <div class="kpi-data">
+                            <h3>Completion</h3>
+                            <div class="kpi-value" id="kpi-completion-pct">0%</div>
+                        </div>
+                    </div>
+                    <div class="kpi-card glow-card">
+                        <div class="kpi-icon">🔥</div>
+                        <div class="kpi-data">
+                            <h3>Current Streak</h3>
+                            <div class="kpi-value" id="kpi-streak">0 Days</div>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon">🔄</div>
+                        <div class="kpi-data">
+                            <h3>Revisions</h3>
+                            <div class="kpi-value" id="kpi-revisions">0</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. ANALYTICS SECTION -->
+                <div class="analytics-grid">
+                    <div class="analytics-card">
+                        <h3>Difficulty Distribution</h3>
+                        <div class="chart-container">
+                            <canvas id="difficultyChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="analytics-card">
+                        <h3>Topic Mastery</h3>
+                        <div class="chart-container">
+                            <canvas id="topicChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="analytics-card full-width">
+                        <h3>Weekly Consistency</h3>
+                        <div class="chart-container" style="height: 200px;">
+                            <canvas id="consistencyChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 6. ELITE FEATURES -->
+                <div class="elite-features-grid">
+                    <div class="elite-card">
+                        <div class="elite-header">🎯 Today's Mission</div>
+                        <p class="elite-desc">Solve 2 arrays & 1 graph problem to maintain your trajectory.</p>
+                    </div>
+                    <div class="elite-card warn">
+                        <div class="elite-header">⚠️ Weakest Topic Alert</div>
+                        <p class="elite-desc" id="weakest-topic-text">Dynamic Programming (0% Success)</p>
+                    </div>
+                    <div class="elite-card success">
+                        <div class="elite-header">📈 Readiness Score</div>
+                        <p class="elite-desc score-text" id="readiness-score-text">Novice (12/100)</p>
                     </div>
                 </div>
             </div>
@@ -126,26 +199,54 @@
                     </div>
                 </div>
                 
-                <!-- DSA Category View -->
+                <!-- DSA Category View (COMMAND CENTER) -->
                 <div id="dsa-prep-content" style="display: none;">
-                    <button class="btn-back" id="back-to-categories-dsa">← Categories</button>
-                    
-                    <!-- Company Selector -->
-                    <div id="company-selection" class="company-selection">
-                        <div class="company-search-box">
-                            <input type="text" id="company-search" placeholder="Search for a company (e.g. Google, Amazon)..." class="skill-input">
-                        </div>
-                        <div id="companies-grid" class="companies-grid">
-                            <!-- Loaded dynamically -->
-                        </div>
-                    </div>
+                    <button class="btn-back" id="back-to-categories-dsa">← Exit Command Center</button>
 
-                    <!-- Questions List -->
-                    <div id="questions-view" class="questions-view" style="display: none;">
-                        <button id="back-to-companies" class="btn-back">← Back to Companies</button>
-                        <h3 id="selected-company-title" class="company-title">Company Name</h3>
-                        <div id="questions-grid" class="results-grid">
-                            <!-- Loaded dynamically -->
+                    <!-- 5. SMART FILTER SYSTEM & COMPANY SELECTION -->
+                    <div class="dsa-workspace">
+                        <div class="workspace-header">
+                            <h2>Problem Database</h2>
+                        </div>
+                        
+                        <!-- Filters -->
+                        <div class="smart-filters">
+                            <div class="filter-group">
+                                <input type="text" id="company-search" placeholder="Search Company (e.g. Google)..." class="skill-input">
+                            </div>
+                            <div class="filter-group">
+                                <select id="filter-difficulty" class="level-dropdown">
+                                    <option value="All">All Difficulties</option>
+                                    <option value="Easy">Easy</option>
+                                    <option value="Medium">Medium</option>
+                                    <option value="Hard">Hard</option>
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <select id="filter-status" class="level-dropdown">
+                                    <option value="All">All Statuses</option>
+                                    <option value="Pending">Pending</option>
+                                    <option value="Completed">Completed</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Company Grid (Visible initially) -->
+                        <div id="company-selection" class="company-selection">
+                            <div id="companies-grid" class="companies-grid">
+                                <!-- Loaded dynamically -->
+                            </div>
+                        </div>
+
+                        <!-- Questions List (Visible after company selection) -->
+                        <div id="questions-view" class="questions-view" style="display: none; margin-top: 24px;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 24px;">
+                                <h3 id="selected-company-title" class="company-title" style="margin:0;">Company Name</h3>
+                                <button id="back-to-companies" class="btn-back">← Change Company</button>
+                            </div>
+                            <div id="questions-grid" class="results-grid">
+                                <!-- Loaded dynamically -->
+                            </div>
                         </div>
                     </div>
                 </div>

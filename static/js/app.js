@@ -260,19 +260,21 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
-    const loadCompanyQuestions = async (company) => {
-        companySelection.style.display = 'none';
-        questionsView.style.display = 'block';
-        selectedCompanyTitle.textContent = company;
-        questionsGrid.innerHTML = '<div class="loading-indicator" style="display:block;"><div class="spinner"></div><p>Fetching questions...</p></div>';
+    // ---- Smart Filtering Variables ----
+    let currentQuestions = [];
+    const filterDifficulty = document.getElementById('filter-difficulty');
+    const filterStatus = document.getElementById('filter-status');
+    const companySearch = document.getElementById('company-search');
 
-        try {
-            const res = await fetch(`/get-questions?company=${encodeURIComponent(company)}`);
-            const data = await res.json();
-            renderQuestions(data.questions);
-        } catch (err) {
-            showToast('Failed to load questions.');
-        }
+    const inferTopic = (title, url) => {
+        const t = (title + ' ' + (url||'')).toLowerCase();
+        if (t.includes('tree')) return 'Trees';
+        if (t.includes('graph')) return 'Graphs';
+        if (t.includes('array') || t.includes('matrix')) return 'Arrays';
+        if (t.includes('string')) return 'Strings';
+        if (t.includes('list') || t.includes('node')) return 'Linked Lists';
+        if (t.includes('dp') || t.includes('dynamic') || t.includes('profit')) return 'Dynamic Prog.';
+        return 'Misc';
     };
 
     const DIFFICULTY_CLASS = { Easy: 'diff-easy', Medium: 'diff-medium', Hard: 'diff-hard' };
@@ -280,13 +282,28 @@ document.addEventListener('DOMContentLoaded', () => {
     const renderQuestions = (questions) => {
         questionsGrid.innerHTML = '';
         if (!questions || questions.length === 0) {
-            questionsGrid.innerHTML = '<p class="empty-state">No questions found for this company.</p>';
+            questionsGrid.innerHTML = '<p class="empty-state">No questions found.</p>';
             return;
         }
 
         const solvedList = getSolvedQuestions();
+        const diffFilter = filterDifficulty ? filterDifficulty.value : 'All';
+        const statFilter = filterStatus ? filterStatus.value : 'All';
 
-        questions.forEach((q, index) => {
+        let filtered = questions.filter(q => {
+            const isSolved = solvedList.some(s => s.link === q.url);
+            if (diffFilter !== 'All' && q.difficulty !== diffFilter) return false;
+            if (statFilter === 'Completed' && !isSolved) return false;
+            if (statFilter === 'Pending' && isSolved) return false;
+            return true;
+        });
+
+        if (filtered.length === 0) {
+            questionsGrid.innerHTML = '<p class="empty-state">No questions match your filters.</p>';
+            return;
+        }
+
+        filtered.forEach((q, index) => {
             const card = document.createElement('div');
             card.className = 'resource-card show';
             
@@ -294,6 +311,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const name       = q.title       || 'Unknown Problem';
             const link       = q.url         || '#';
             const difficulty = q.difficulty  || '';
+            const topic      = inferTopic(name, link);
             const acceptance = q.acceptance  || '';
             const frequency  = q.frequency   || '';
             const others     = q.other_companies || [];
@@ -307,6 +325,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     ${id ? `<span class="rank-badge lc-id">#${escapeHTML(id)}</span>` : `<span class="rank-badge">#${index + 1}</span>`}
                     <div class="card-badges">
                         ${difficulty ? `<span class="pill-badge diff-pill ${diffClass}">${escapeHTML(difficulty)}</span>` : ''}
+                        <span class="pill-badge" style="background:rgba(255,255,255,0.1)">${topic}</span>
                     </div>
                 </div>
 
@@ -314,7 +333,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     <input type="checkbox" class="solve-checkbox"
                         data-link="${link}"
                         data-name="${escapeHTML(name)}"
-                        data-company="${escapeHTML(selectedCompanyTitle.textContent)}"
+                        data-diff="${difficulty}"
+                        data-topic="${topic}"
                         ${isSolved ? 'checked' : ''}>
                     <span class="solve-label">${isSolved ? '✅ Solved' : 'Mark as Solved'}</span>
                 </div>
@@ -343,19 +363,47 @@ document.addEventListener('DOMContentLoaded', () => {
                 </a>
             `;
 
-            // Handle checkbox click
             const checkbox = card.querySelector('.solve-checkbox');
             checkbox.addEventListener('change', (e) => {
-                toggleSolved(link, name, selectedCompanyTitle.textContent, e.target.checked);
+                toggleSolved({ link, name, difficulty, topic }, e.target.checked);
                 card.querySelector('.solve-label').textContent = e.target.checked ? '✅ Solved' : 'Mark as Solved';
+                updateCommandCenter();
             });
 
             questionsGrid.appendChild(card);
         });
     };
 
+    if (filterDifficulty) filterDifficulty.addEventListener('change', () => renderQuestions(currentQuestions));
+    if (filterStatus) filterStatus.addEventListener('change', () => renderQuestions(currentQuestions));
+    if (companySearch) {
+        companySearch.addEventListener('input', (e) => {
+            const v = e.target.value.toLowerCase();
+            const badges = companiesGrid.querySelectorAll('.company-badge');
+            badges.forEach(b => {
+                b.style.display = b.textContent.toLowerCase().includes(v) ? 'inline-block' : 'none';
+            });
+        });
+    }
+
+    const loadCompanyQuestions = async (company) => {
+        companySelection.style.display = 'none';
+        questionsView.style.display = 'block';
+        selectedCompanyTitle.textContent = company;
+        questionsGrid.innerHTML = '<div class="loading-indicator" style="display:block;"><div class="spinner"></div><p>Fetching questions...</p></div>';
+
+        try {
+            const res = await fetch(`/get-questions?company=${encodeURIComponent(company)}`);
+            const data = await res.json();
+            currentQuestions = data.questions;
+            renderQuestions(currentQuestions);
+        } catch (err) {
+            showToast('Failed to load questions.');
+        }
+    };
+
     /**
-     * Solved Questions State (LocalStorage)
+     * Solved Questions State & Command Center Automation
      */
     const getSolvedQuestions = () => {
         try {
@@ -365,47 +413,145 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    const toggleSolved = (link, name, company, isChecked) => {
+    const toggleSolved = (q, isChecked) => {
         let solved = getSolvedQuestions();
         if (isChecked) {
-            if (!solved.find(s => s.link === link)) {
-                solved.push({ link, name, company, solvedAt: new Date().toISOString() });
+            if (!solved.find(s => s.link === q.link)) {
+                solved.push({ ...q, solvedAt: new Date().toISOString(), revisions: 0 });
+            } else {
+                // If already solved, maybe it's a revision tick
+                let existing = solved.find(s => s.link === q.link);
+                existing.revisions = (existing.revisions || 0) + 1;
             }
         } else {
-            solved = solved.filter(s => s.link !== link);
+            solved = solved.filter(s => s.link !== q.link);
         }
         localStorage.setItem('solved_dsa_questions', JSON.stringify(solved));
     };
 
-    const renderDashboardProgress = () => {
-        const dashboardProgress = document.getElementById('dashboard-progress');
-        const solvedCountUI = document.getElementById('total-solved-count');
-        const companyGridUI = document.getElementById('company-stats-grid');
-        
+    let charts = {};
+    const updateCommandCenter = () => {
         const solved = getSolvedQuestions();
+        const GOAL = 500;
         
-        if (solved.length === 0) {
-            dashboardProgress.style.display = 'none';
-            return;
+        // 1. Update KPIs
+        const totalSolved = solved.length;
+        const completionPct = Math.min(100, Math.round((totalSolved / GOAL) * 100));
+        
+        document.getElementById('kpi-completed').textContent = totalSolved;
+        document.getElementById('kpi-completion-pct').textContent = completionPct + '%';
+        document.getElementById('level-progress-text').textContent = `${totalSolved} / ${GOAL} Mastered`;
+        document.getElementById('dsa-main-progress').style.width = completionPct + '%';
+        
+        const totalRevisions = solved.reduce((acc, s) => acc + (s.revisions || 0), 0);
+        document.getElementById('kpi-revisions').textContent = totalRevisions;
+
+        // Calculate Streak
+        let streak = 0;
+        let today = new Date().toDateString();
+        // naive streak based on unique solved dates
+        let dates = [...new Set(solved.map(s => new Date(s.solvedAt).toDateString()))].sort((a,b)=>new Date(b)-new Date(a));
+        if (dates.length > 0) {
+            let curr = new Date();
+            for(let d of dates) {
+                if (new Date(d).toDateString() === curr.toDateString() || streak === 0 && (curr - new Date(d)) < 172800000) {
+                    streak++;
+                    curr.setDate(curr.getDate() - 1);
+                } else break;
+            }
+        }
+        document.getElementById('kpi-streak').textContent = streak + ' Days';
+
+        // Readiness Score
+        const counts = { Easy:0, Medium:0, Hard:0 };
+        const topicCounts = {};
+        solved.forEach(s => {
+            counts[s.difficulty || 'Easy']++;
+            topicCounts[s.topic || 'Misc'] = (topicCounts[s.topic || 'Misc'] || 0) + 1;
+        });
+        const readinessRaw = (counts.Hard * 3 + counts.Medium * 2 + counts.Easy * 1);
+        const readinessScore = Math.min(100, Math.round((readinessRaw / (GOAL * 2)) * 100));
+        let rank = readinessScore < 30 ? 'Novice' : readinessScore < 70 ? 'Proficient' : 'Elite';
+        document.getElementById('readiness-score-text').textContent = `${rank} (${readinessScore}/100)`;
+
+        // Weakest Topic
+        let weakest = 'N/A';
+        if (Object.keys(topicCounts).length > 0) {
+            weakest = Object.keys(topicCounts).reduce((a, b) => topicCounts[a] < topicCounts[b] ? a : b);
+            document.getElementById('weakest-topic-text').textContent = `${weakest} (Needs Focus)`;
         }
 
-        dashboardProgress.style.display = 'grid';
-        solvedCountUI.textContent = solved.length;
+        // --- CHARTS ---
+        if (!window.Chart) return;
+        
+        Chart.defaults.color = '#94a3b8';
+        Chart.defaults.borderColor = 'rgba(255,255,255,0.05)';
 
-        // Group by company
-        const companyStats = {};
-        solved.forEach(q => {
-            companyStats[q.company] = (companyStats[q.company] || 0) + 1;
+        // Difficulty Chart
+        if (charts.diff) charts.diff.destroy();
+        charts.diff = new Chart(document.getElementById('difficultyChart'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Easy', 'Medium', 'Hard'],
+                datasets: [{
+                    data: [counts.Easy, counts.Medium, counts.Hard],
+                    backgroundColor: ['#22c55e', '#eab308', '#ef4444'],
+                    borderWidth: 0,
+                    cutout: '70%'
+                }]
+            },
+            options: { maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
         });
 
-        companyGridUI.innerHTML = Object.entries(companyStats)
-            .sort((a, b) => b[1] - a[1])
-            .map(([comp, count]) => `
-                <div class="comp-stat-badge">
-                    <span>${escapeHTML(comp)}</span>
-                    <span class="comp-count">${count}</span>
-                </div>
-            `).join('');
+        // Topic Chart
+        if (charts.topic) charts.topic.destroy();
+        const topTopics = Object.entries(topicCounts).sort((a,b)=>b[1]-a[1]).slice(0,5);
+        charts.topic = new Chart(document.getElementById('topicChart'), {
+            type: 'bar',
+            data: {
+                labels: topTopics.map(t=>t[0]),
+                datasets: [{
+                    label: 'Solved',
+                    data: topTopics.map(t=>t[1]),
+                    backgroundColor: '#6366f1',
+                    borderRadius: 4
+                }]
+            },
+            options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+        });
+
+        // Consistency Chart (last 7 days)
+        if (charts.cons) charts.cons.destroy();
+        const last7 = [...Array(7)].map((_, i) => {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            return d.toDateString();
+        }).reverse();
+        
+        const trendData = last7.map(date => solved.filter(s => new Date(s.solvedAt).toDateString() === date).length);
+
+        charts.cons = new Chart(document.getElementById('consistencyChart'), {
+            type: 'line',
+            data: {
+                labels: ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5', 'Day 6', 'Today'],
+                datasets: [{
+                    label: 'Problems Solved',
+                    data: trendData,
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, suggestedMax: 5 } } }
+        });
+    };
+
+    const renderDashboardProgress = () => {
+        const dashboardProgress = document.getElementById('dashboard-progress');
+        dashboardProgress.style.display = 'block';
+        updateCommandCenter();
     };
 
     // Real Resume Analysis logic
