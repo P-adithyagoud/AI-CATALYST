@@ -143,6 +143,7 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast('Removed from saved playlists');
             syncSavedPlaylists(savedPlaylists);
             renderSavedPlaylists();
+            updateCommandCenter();
         } else {
             // Add it — fetch real videos from YouTube API
             playlist.savedAt = new Date().toISOString();
@@ -178,6 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             syncSavedPlaylists(savedPlaylists);
             renderSavedPlaylists();
+            updateCommandCenter();
             
             // Track save event to DB
             trackClick(playlist.url, playlist.title, 'save');
@@ -197,6 +199,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             syncSavedPlaylists(savedPlaylists);
             renderSavedPlaylists();
+            updateCommandCenter();
             showToast(isChecked ? 'All videos completed!' : 'Marked incomplete');
 
             // Track complete event to DB if marked as complete
@@ -226,6 +229,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             syncSavedPlaylists(savedPlaylists);
             renderSavedPlaylists();
+            updateCommandCenter();
             
             showToast(`Video marked ${isChecked ? 'completed' : 'incomplete'} (${completedCount}/${total})`);
 
@@ -240,6 +244,7 @@ document.addEventListener('DOMContentLoaded', () => {
         savedPlaylists = savedPlaylists.filter(p => p.url !== url);
         syncSavedPlaylists(savedPlaylists);
         renderSavedPlaylists();
+        updateCommandCenter();
         showToast('Removed playlist');
         
         // Also update any visible buttons on screen
