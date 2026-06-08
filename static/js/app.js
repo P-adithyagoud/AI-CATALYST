@@ -48,6 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentResults = {};
 
     // Saved playlists management state and actions
+    let savedPlaylists = [];
     const generateVideosForPlaylist = (title, skill) => {
         const t = (title + ' ' + (skill || '')).toLowerCase();
         let topics = [];
@@ -127,38 +128,20 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const getSavedPlaylists = () => {
-        try {
-            const saved = JSON.parse(localStorage.getItem('saved_playlists')) || [];
-            let changed = false;
-            const enriched = saved.map(p => {
-                if (!p.videos || p.videos.length === 0) {
-                    p.videos = generateVideosForPlaylist(p.title, p.skill);
-                    changed = true;
-                }
-                return p;
-            });
-            if (changed) {
-                localStorage.setItem('saved_playlists', JSON.stringify(enriched));
-            }
-            return enriched;
-        } catch {
-            return [];
-        }
+        return savedPlaylists;
     };
 
     const togglePlaylistSave = async (playlist, btnEl) => {
-        let saved = getSavedPlaylists();
-        const index = saved.findIndex(p => p.url === playlist.url);
+        const index = savedPlaylists.findIndex(p => p.url === playlist.url);
         if (index > -1) {
             // Remove it
-            saved.splice(index, 1);
+            savedPlaylists.splice(index, 1);
             if (btnEl) {
                 btnEl.textContent = '💾 Save';
                 btnEl.classList.remove('saved');
             }
             showToast('Removed from saved playlists');
-            localStorage.setItem('saved_playlists', JSON.stringify(saved));
-            syncSavedPlaylists(saved);
+            syncSavedPlaylists(savedPlaylists);
             renderSavedPlaylists();
         } else {
             // Add it — fetch real videos from YouTube API
@@ -187,14 +170,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 showToast('Saved! (Using estimated video list)');
             }
 
-            saved.push(playlist);
+            savedPlaylists.push(playlist);
             if (btnEl) {
                 btnEl.textContent = '✅ Saved';
                 btnEl.classList.add('saved');
                 btnEl.disabled = false;
             }
-            localStorage.setItem('saved_playlists', JSON.stringify(saved));
-            syncSavedPlaylists(saved);
+            syncSavedPlaylists(savedPlaylists);
             renderSavedPlaylists();
             
             // Track save event to DB
@@ -203,8 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const togglePlaylistCompleted = (url, isChecked) => {
-        let saved = getSavedPlaylists();
-        const playlist = saved.find(p => p.url === url);
+        const playlist = savedPlaylists.find(p => p.url === url);
         if (playlist) {
             playlist.completed = isChecked;
             playlist.completedAt = isChecked ? new Date().toISOString() : null;
@@ -214,8 +195,7 @@ document.addEventListener('DOMContentLoaded', () => {
             playlist.videos.forEach(v => {
                 v.completed = isChecked;
             });
-            localStorage.setItem('saved_playlists', JSON.stringify(saved));
-            syncSavedPlaylists(saved);
+            syncSavedPlaylists(savedPlaylists);
             renderSavedPlaylists();
             showToast(isChecked ? 'All videos completed!' : 'Marked incomplete');
 
@@ -227,8 +207,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const toggleVideoCompleted = (playlistUrl, videoId, isChecked) => {
-        let saved = getSavedPlaylists();
-        const playlist = saved.find(p => p.url === playlistUrl);
+        const playlist = savedPlaylists.find(p => p.url === playlistUrl);
         if (playlist) {
             if (!playlist.videos) {
                 playlist.videos = generateVideosForPlaylist(playlist.title, playlist.skill);
@@ -245,8 +224,7 @@ document.addEventListener('DOMContentLoaded', () => {
             playlist.completed = (completedCount === total);
             playlist.completedAt = playlist.completed ? new Date().toISOString() : null;
 
-            localStorage.setItem('saved_playlists', JSON.stringify(saved));
-            syncSavedPlaylists(saved);
+            syncSavedPlaylists(savedPlaylists);
             renderSavedPlaylists();
             
             showToast(`Video marked ${isChecked ? 'completed' : 'incomplete'} (${completedCount}/${total})`);
@@ -259,10 +237,8 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const removePlaylist = (url) => {
-        let saved = getSavedPlaylists();
-        saved = saved.filter(p => p.url !== url);
-        localStorage.setItem('saved_playlists', JSON.stringify(saved));
-        syncSavedPlaylists(saved);
+        savedPlaylists = savedPlaylists.filter(p => p.url !== url);
+        syncSavedPlaylists(savedPlaylists);
         renderSavedPlaylists();
         showToast('Removed playlist');
         
@@ -400,15 +376,17 @@ document.addEventListener('DOMContentLoaded', () => {
             if (res.ok) {
                 const list = await res.json();
                 if (Array.isArray(list)) {
-                    // Only generate fallback videos for playlists that have no videos at all
-                    // Don't overwrite playlists that already have real YouTube API videos
-                    const enrichedList = list.map(p => {
+                    let changed = false;
+                    savedPlaylists = list.map(p => {
                         if (!p.videos || p.videos.length === 0) {
                             p.videos = generateVideosForPlaylist(p.title, p.skill);
+                            changed = true;
                         }
                         return p;
                     });
-                    localStorage.setItem('saved_playlists', JSON.stringify(enrichedList));
+                    if (changed) {
+                        syncSavedPlaylists(savedPlaylists);
+                    }
                 }
             }
         } catch (e) {
@@ -962,33 +940,29 @@ document.addEventListener('DOMContentLoaded', () => {
     /**
      * Solved Questions State & Command Center Automation
      */
+    let solvedDsaQuestions = [];
+    
     const getSolvedQuestions = () => {
-        try {
-            return JSON.parse(localStorage.getItem('solved_dsa_questions')) || [];
-        } catch {
-            return [];
-        }
+        return solvedDsaQuestions;
     };
 
     const toggleSolved = (q, isChecked) => {
-        let solved = getSolvedQuestions();
         if (isChecked) {
-            if (!solved.find(s => s.link === q.link)) {
-                solved.push({ ...q, solvedAt: new Date().toISOString(), revisions: 0 });
+            if (!solvedDsaQuestions.find(s => s.link === q.link)) {
+                solvedDsaQuestions.push({ ...q, solvedAt: new Date().toISOString(), revisions: 0 });
             } else {
-                let existing = solved.find(s => s.link === q.link);
+                let existing = solvedDsaQuestions.find(s => s.link === q.link);
                 existing.revisions = (existing.revisions || 0) + 1;
             }
         } else {
-            solved = solved.filter(s => s.link !== q.link);
+            solvedDsaQuestions = solvedDsaQuestions.filter(s => s.link !== q.link);
         }
-        localStorage.setItem('solved_dsa_questions', JSON.stringify(solved));
 
         // Sync to backend Supabase database
         fetch('/sync-dsa-progress', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ solved_list: solved })
+            body: JSON.stringify({ solved_list: solvedDsaQuestions })
         }).catch(err => console.error("DSA sync failed:", err));
     };
 
@@ -1079,22 +1053,23 @@ document.addEventListener('DOMContentLoaded', () => {
         drawSidebarStreakSparkline();
     };
 
+    let latestResumeAnalysis = null;
+
     const loadResumeScore = async () => {
         try {
             const res = await fetch('/get-latest-resume');
             if (res.ok) {
                 const dbData = await res.json();
                 if (dbData) {
-                    localStorage.setItem('latest_resume_analysis', JSON.stringify(dbData));
+                    latestResumeAnalysis = dbData;
                 }
             }
         } catch (e) {
             console.error("Failed to load resume analysis from DB:", e);
         }
 
-        const stored = localStorage.getItem('latest_resume_analysis');
-        if (stored) {
-            const data = JSON.parse(stored);
+        const data = latestResumeAnalysis;
+        if (data) {
             document.getElementById('dashboard-resume-score').textContent = `${data.score}/100`;
             const verdictEl = document.getElementById('dashboard-resume-verdict');
             verdictEl.textContent = data.verdict;
@@ -1329,14 +1304,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const data = await res.json();
             
-            // Save to localStorage for dashboard persistence
-            localStorage.setItem('latest_resume_analysis', JSON.stringify({
+            // Save to in-memory state for dashboard persistence
+            latestResumeAnalysis = {
                 score: data.final_score * 10 || 85,
                 verdict: data.hire_verdict || 'Excellent',
                 impact: data.final_score >= 8 ? 'Strong' : 'Average',
                 match: data.ats_simulation?.ats_pass_probability || 'High',
                 ats: data.ats_simulation?.keyword_match_score || 85
-            }));
+            };
 
             renderResumeResults(data);
 
@@ -1758,7 +1733,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (res.ok) {
                 const list = await res.json();
                 if (Array.isArray(list)) {
-                    localStorage.setItem('solved_dsa_questions', JSON.stringify(list));
+                    solvedDsaQuestions = list;
                 }
             }
         } catch (e) {
