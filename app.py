@@ -1282,11 +1282,23 @@ def sync_saved_playlists():
         return jsonify({"error": "DB unavailable"}), 500
         
     try:
+        # Calculate real completion percentage based on all saved playlists and videos
+        total_videos = 0
+        completed_videos = 0
+        for p in playlists_list:
+            videos = p.get("videos", [])
+            total_videos += len(videos)
+            completed_videos += len([v for v in videos if v.get("completed")])
+        
+        pct = 0.0
+        if total_videos > 0:
+            pct = round((completed_videos / total_videos) * 100.0, 2)
+
         sb.table("learning_progress").upsert({
             "session_id": session["user_id"],
             "skill_name": "saved_playlists",
             "completed_steps": playlists_list,
-            "completion_pct": 100.0
+            "completion_pct": pct
         }, on_conflict="session_id, skill_name").execute()
         return jsonify({"status": "success"})
     except Exception as e:

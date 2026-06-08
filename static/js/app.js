@@ -196,6 +196,9 @@ document.addEventListener('DOMContentLoaded', () => {
             localStorage.setItem('saved_playlists', JSON.stringify(saved));
             syncSavedPlaylists(saved);
             renderSavedPlaylists();
+            
+            // Track save event to DB
+            trackClick(playlist.url, playlist.title, 'save');
         }
     };
 
@@ -215,6 +218,11 @@ document.addEventListener('DOMContentLoaded', () => {
             syncSavedPlaylists(saved);
             renderSavedPlaylists();
             showToast(isChecked ? 'All videos completed!' : 'Marked incomplete');
+
+            // Track complete event to DB if marked as complete
+            if (isChecked) {
+                trackClick(playlist.url, playlist.title, 'complete');
+            }
         }
     };
 
@@ -233,6 +241,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Re-calculate playlist completion
             const total = playlist.videos.length;
             const completedCount = playlist.videos.filter(v => v.completed).length;
+            const wasCompleted = playlist.completed;
             playlist.completed = (completedCount === total);
             playlist.completedAt = playlist.completed ? new Date().toISOString() : null;
 
@@ -241,6 +250,11 @@ document.addEventListener('DOMContentLoaded', () => {
             renderSavedPlaylists();
             
             showToast(`Video marked ${isChecked ? 'completed' : 'incomplete'} (${completedCount}/${total})`);
+
+            // Track complete event to DB if all videos were completed by checking this box
+            if (playlist.completed && !wasCompleted) {
+                trackClick(playlist.url, playlist.title, 'complete');
+            }
         }
     };
 
