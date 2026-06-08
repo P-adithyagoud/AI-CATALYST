@@ -46,21 +46,22 @@ def get_sb():
 # ──────────────────────────────────────────────
 # DB Helper Functions
 # ──────────────────────────────────────────────
-def _skill_key(skill: str) -> str:
-    return re.sub(r'[^a-z0-9]', '_', skill.lower().strip())
+def _skill_key(skill: str, level: str = "Beginner", language: str = "English") -> str:
+    key_str = f"{skill}_{level}_{language}"
+    return re.sub(r'[^a-z0-9]', '_', key_str.lower().strip())
 
-def db_get_cached_skill(skill: str):
+def db_get_cached_skill(skill: str, level: str = "Beginner", language: str = "English"):
     """Step 1: Check DB cache first. Returns full response_data dict or None."""
     try:
         sb = get_sb()
         if not sb: return None
-        key = _skill_key(skill)
+        key = _skill_key(skill, level, language)
         res = sb.table("skills_cache").select("*").eq("skill_key", key).limit(1).execute()
         if res.data:
             row = res.data[0]
             # Increment search counter asynchronously
             sb.table("skills_cache").update({"total_searches": row["total_searches"] + 1}).eq("id", row["id"]).execute()
-            print(f"[DB] Cache HIT for '{skill}' (tier {row['tier']}, {row['total_searches']} searches)")
+            print(f"[DB] Cache HIT for '{skill} ({level} - {language})' (tier {row['tier']}, {row['total_searches']} searches)")
             return {
                 "tier": 0,  # 0 = DB cache hit
                 "skill": skill,
@@ -75,14 +76,14 @@ def db_get_cached_skill(skill: str):
         print(f"[DB] Cache lookup failed: {e}")
     return None
 
-def db_save_skill(skill: str, tier: int, source: str, response_data: dict):
+def db_save_skill(skill: str, level: str, language: str, tier: int, source: str, response_data: dict):
     """Step 5: Persist result to DB for future instant retrieval."""
     try:
         sb = get_sb()
         if not sb: return
-        key = _skill_key(skill)
+        key = _skill_key(skill, level, language)
         row = {
-            "skill_name": skill,
+            "skill_name": f"{skill} ({level} - {language})",
             "skill_key": key,
             "tier": tier,
             "source_type": source,
@@ -93,7 +94,7 @@ def db_save_skill(skill: str, tier: int, source: str, response_data: dict):
             "total_searches": 1
         }
         sb.table("skills_cache").upsert(row, on_conflict="skill_key").execute()
-        print(f"[DB] Saved '{skill}' to cache (tier={tier}, source={source})")
+        print(f"[DB] Saved '{skill} ({level} - {language})' to cache (tier={tier}, source={source})")
     except Exception as e:
         print(f"[DB] Save failed: {e}")
 
@@ -578,15 +579,26 @@ def validate_url(url, source="csv"):
         # On timeout/connection error, allow it through rather than false-reject
         return True
 
-def fetch_youtube_playlists(skill, max_results=10):
+def fetch_youtube_playlists(skill, level="Beginner", language="English", max_results=10):
     if not YOUTUBE_API_KEY or YOUTUBE_API_KEY == "your_youtube_api_key_here":
         print("[WARN] Invalid YouTube API Key")
         return []
     
+    # Construct a descriptive search query incorporating level and language
+    query_parts = [skill]
+    if level and level.lower() != "all":
+        query_parts.append(level)
+    query_parts.append("full course tutorial playlist")
+    if language and language.lower() != "english":
+        query_parts.append(f"in {language}")
+        
+    query_str = " ".join(query_parts)
+    print(f"[YT] Fetching playlists with query: '{query_str}'")
+    
     url = "https://www.googleapis.com/youtube/v3/search"
     params = {
         "part": "snippet",
-        "q": f"{skill} full course tutorial playlist",
+        "q": query_str,
         "type": "playlist",
         "maxResults": max_results,
         "key": YOUTUBE_API_KEY
@@ -645,22 +657,23 @@ Do NOT return anything else. Ensure the JSON is valid."""
         print(f"[ERROR] Groq ranking failed: {e}")
         return None
 
-def generate_learning_path(skill, level):
+def generate_learning_path(skill, level, language="English"):
     client = Groq()
-    system_prompt = """[ignoring loop detection]
+    system_prompt = f"""[ignoring loop detection]
 You are an elite Tech Career Mentor.
 Generate a structured, step-by-step learning roadmap for the given skill.
+All texts (titles, descriptions, topics, etc.) MUST be returned in the requested language: {language}.
 RETURN EXACTLY THIS JSON STRUCTURE:
-{
-  "roadmap": {
+{{
+  "roadmap": {{
     "beginner": ["Topic 1", "Topic 2", "Topic 3"],
     "intermediate": ["Topic 1", "Topic 2", "Topic 3"],
     "advanced": ["Topic 1", "Topic 2"],
-    "projects": [{"name": "", "description": ""}, {"name": "", "description": ""}],
+    "projects": [{{"name": "", "description": ""}}, {{"name": "", "description": ""}}],
     "certifications": ["Cert 1", "Cert 2"],
     "interview_prep": ["Prep step 1", "Prep step 2"]
-  }
-}
+  }}
+}}
 Do NOT return anything else. Ensure the JSON is valid."""
 
     user_msg = f"Skill: {skill} ({level})"
@@ -694,13 +707,15 @@ def get_resource():
         return jsonify({"error": "please kindly search appropriate skills"}), 400
 
     # ── STEP 1: DB Cache (fastest path — zero API cost) ───────────
-    cached = db_get_cached_skill(skill)
+    cached = db_get_cached_skill(skill, level, language)
     if cached:
         cached["tier_label"] = "⚡ Instant Result: Retrieved from AI Memory"
         return jsonify(cached)
 
-    # ── STEP 2: CSV Check (curated trusted data) ──────────────────
-    local_playlists = find_in_db(PLAYLIST_DB, skill, row_to_playlist, level=level)
+    # ── STEP 2: CSV Check (curated trusted data — English only) ──────────────────
+    local_playlists = []
+    if language.lower() == "english":
+        local_playlists = find_in_db(PLAYLIST_DB, skill, row_to_playlist, level=level)
 
     if local_playlists:
         def validate_csv_playlists():
@@ -713,7 +728,7 @@ def get_resource():
 
         with ThreadPoolExecutor(max_workers=2) as executor:
             future_playlists = executor.submit(validate_csv_playlists)
-            future_roadmap   = executor.submit(generate_learning_path, skill, level)
+            future_roadmap   = executor.submit(generate_learning_path, skill, level, language)
             valid_local_playlists = future_playlists.result()
 
         if valid_local_playlists:
@@ -736,7 +751,7 @@ def get_resource():
 
             # ── STEP 5: Save to DB + init trust scores ─────────────
             def _persist():
-                db_save_skill(skill, 1, "csv", response_data)
+                db_save_skill(skill, level, language, 1, "csv", response_data)
                 db_log_recommendation(skill, 1, "csv", response_data, sid)
                 for pl in valid_local_playlists:
                     db_upsert_trust_score(pl.get("url",""), pl.get("title",""), pl.get("channel",""), skill)
@@ -745,14 +760,14 @@ def get_resource():
             return jsonify(response_data)
 
     # ── STEP 3: YouTube API Fallback ──────────────────────────────
-    youtube_data = fetch_youtube_playlists(skill)
+    youtube_data = fetch_youtube_playlists(skill, level=level, language=language)
     if not youtube_data:
         return jsonify({"error": "No verified high-quality learning resource found for this skill yet."}), 404
 
     # ── STEP 4: Groq AI Ranking + Roadmap (parallel) ─────────────
     with ThreadPoolExecutor(max_workers=2) as executor:
         future_rank   = executor.submit(analyze_and_rank_resources, youtube_data, skill, level)
-        future_road   = executor.submit(generate_learning_path, skill, level)
+        future_road   = executor.submit(generate_learning_path, skill, level, language)
         ranking_data  = future_rank.result()
         roadmap_data  = future_road.result()
 
@@ -791,7 +806,7 @@ def get_resource():
     # ── STEP 5: Save to DB + init trust scores ────────────────────
     def _persist_yt():
         source = "ai_ranked" if final_recommendations else "youtube_api"
-        db_save_skill(skill, 3, source, response_data)
+        db_save_skill(skill, level, language, 3, source, response_data)
         db_log_recommendation(skill, 3, source, response_data, sid)
         all_resources = list(final_recommendations.values()) + response_data["fallback_playlists"]
         for r in all_resources:
