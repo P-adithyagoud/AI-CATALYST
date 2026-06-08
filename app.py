@@ -657,23 +657,23 @@ Do NOT return anything else. Ensure the JSON is valid."""
         print(f"[ERROR] Groq ranking failed: {e}")
         return None
 
-def generate_learning_path(skill, level, language="English"):
+def generate_learning_path(skill, level):
     client = Groq()
-    system_prompt = f"""[ignoring loop detection]
+    system_prompt = """[ignoring loop detection]
 You are an elite Tech Career Mentor.
 Generate a structured, step-by-step learning roadmap for the given skill.
-All texts (titles, descriptions, topics, etc.) MUST be returned in the requested language: {language}.
+All texts (titles, descriptions, topics, etc.) MUST be returned in English.
 RETURN EXACTLY THIS JSON STRUCTURE:
-{{
-  "roadmap": {{
+{
+  "roadmap": {
     "beginner": ["Topic 1", "Topic 2", "Topic 3"],
     "intermediate": ["Topic 1", "Topic 2", "Topic 3"],
     "advanced": ["Topic 1", "Topic 2"],
-    "projects": [{{"name": "", "description": ""}}, {{"name": "", "description": ""}}],
+    "projects": [{"name": "", "description": ""}, {"name": "", "description": ""}],
     "certifications": ["Cert 1", "Cert 2"],
     "interview_prep": ["Prep step 1", "Prep step 2"]
-  }}
-}}
+  }
+}
 Do NOT return anything else. Ensure the JSON is valid."""
 
     user_msg = f"Skill: {skill} ({level})"
@@ -728,7 +728,7 @@ def get_resource():
 
         with ThreadPoolExecutor(max_workers=2) as executor:
             future_playlists = executor.submit(validate_csv_playlists)
-            future_roadmap   = executor.submit(generate_learning_path, skill, level, language)
+            future_roadmap   = executor.submit(generate_learning_path, skill, level)
             valid_local_playlists = future_playlists.result()
 
         if valid_local_playlists:
@@ -767,7 +767,7 @@ def get_resource():
     # ── STEP 4: Groq AI Ranking + Roadmap (parallel) ─────────────
     with ThreadPoolExecutor(max_workers=2) as executor:
         future_rank   = executor.submit(analyze_and_rank_resources, youtube_data, skill, level)
-        future_road   = executor.submit(generate_learning_path, skill, level, language)
+        future_road   = executor.submit(generate_learning_path, skill, level)
         ranking_data  = future_rank.result()
         roadmap_data  = future_road.result()
 
