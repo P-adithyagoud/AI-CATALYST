@@ -1002,46 +1002,75 @@ document.addEventListener('DOMContentLoaded', () => {
         let rank = readinessScore < 30 ? 'Novice' : readinessScore < 70 ? 'Proficient' : 'Elite';
 
         // 2. Update Sidebar Streak Widget
-        const displayStreak = streak > 0 ? streak : 12; // default 12 if no activity yet to match layout
-        document.getElementById('sidebar-streak-days').textContent = `${displayStreak} days`;
+        document.getElementById('sidebar-streak-days').textContent = `${streak} days`;
 
         // 3. Update Dashboard Progress Card
         const progressPctText = document.getElementById('dashboard-progress-pct');
         const progressCountText = document.getElementById('dashboard-progress-count');
         const progressRingBar = document.getElementById('dashboard-progress-ring-bar');
 
-        const displayPct = Math.max(72, completionPct); // baseline 72%
-        const displayCountSolved = Math.max(24, totalSolved);
-        const displayTotalCount = 33; // baseline topics
+        // Calculate real playlist progress
+        const savedPl = getSavedPlaylists();
+        let totalPlaylistVideos = 0;
+        let completedPlaylistVideos = 0;
+        savedPl.forEach(p => {
+            if (p.videos) {
+                totalPlaylistVideos += p.videos.length;
+                completedPlaylistVideos += p.videos.filter(v => v.completed).length;
+            }
+        });
 
-        progressPctText.textContent = `${displayPct}%`;
-        progressCountText.textContent = `${displayCountSolved} / ${displayTotalCount} topics`;
+        // Overall progress = combination of DSA + playlist progress
+        const dsaPct = Math.min(100, Math.round((totalSolved / GOAL) * 100));
+        const playlistPct = totalPlaylistVideos > 0 ? Math.round((completedPlaylistVideos / totalPlaylistVideos) * 100) : 0;
+        const overallPct = totalSolved > 0 || totalPlaylistVideos > 0
+            ? Math.round((dsaPct + playlistPct) / 2)
+            : 0;
+        const overallTopics = totalSolved + completedPlaylistVideos;
+        const overallTotal = GOAL + totalPlaylistVideos;
+
+        progressPctText.textContent = `${overallPct}%`;
+        progressCountText.textContent = `${overallTopics} / ${overallTotal} topics`;
         
         // SVG Ring calculations (circumference = 314.16)
-        const offset = 314.16 - (314.16 * displayPct / 100);
+        const offset = 314.16 - (314.16 * overallPct / 100);
         progressRingBar.style.strokeDashoffset = offset;
 
-        // Progress Bars Fill
-        const dsaProgressVal = Math.min(100, 80 + Math.round((totalSolved / GOAL) * 20));
-        document.getElementById('dsa-progress-label-pct').textContent = `${dsaProgressVal}%`;
-        document.getElementById('dsa-progress-bar-fill').style.width = `${dsaProgressVal}%`;
+        // Progress Bars Fill — DSA uses real data
+        document.getElementById('dsa-progress-label-pct').textContent = `${dsaPct}%`;
+        document.getElementById('dsa-progress-bar-fill').style.width = `${dsaPct}%`;
         
-        document.getElementById('sd-progress-label-pct').textContent = '65%';
-        document.getElementById('sd-progress-bar-fill').style.width = '65%';
+        // System Design — based on saved playlists with "system design" in title
+        const sdPlaylists = savedPl.filter(p => (p.title + ' ' + (p.skill || '')).toLowerCase().includes('system'));
+        const sdTotal = sdPlaylists.reduce((a, p) => a + (p.videos ? p.videos.length : 0), 0);
+        const sdDone = sdPlaylists.reduce((a, p) => a + (p.videos ? p.videos.filter(v => v.completed).length : 0), 0);
+        const sdPct = sdTotal > 0 ? Math.round((sdDone / sdTotal) * 100) : 0;
+        document.getElementById('sd-progress-label-pct').textContent = `${sdPct}%`;
+        document.getElementById('sd-progress-bar-fill').style.width = `${sdPct}%`;
         
-        document.getElementById('aiml-progress-label-pct').textContent = '75%';
-        document.getElementById('aiml-progress-bar-fill').style.width = '75%';
+        // AI/ML — based on saved playlists with "ai" or "ml" or "machine" in title
+        const aiPlaylists = savedPl.filter(p => /(ai|ml|machine|deep|neural)/i.test(p.title + ' ' + (p.skill || '')));
+        const aiTotal = aiPlaylists.reduce((a, p) => a + (p.videos ? p.videos.length : 0), 0);
+        const aiDone = aiPlaylists.reduce((a, p) => a + (p.videos ? p.videos.filter(v => v.completed).length : 0), 0);
+        const aiPct = aiTotal > 0 ? Math.round((aiDone / aiTotal) * 100) : 0;
+        document.getElementById('aiml-progress-label-pct').textContent = `${aiPct}%`;
+        document.getElementById('aiml-progress-bar-fill').style.width = `${aiPct}%`;
         
-        document.getElementById('dev-progress-label-pct').textContent = '70%';
-        document.getElementById('dev-progress-bar-fill').style.width = '70%';
+        // Dev — remaining playlists (not SD/AI categorized)
+        const devPlaylists = savedPl.filter(p => !sdPlaylists.includes(p) && !aiPlaylists.includes(p));
+        const devTotal = devPlaylists.reduce((a, p) => a + (p.videos ? p.videos.length : 0), 0);
+        const devDone = devPlaylists.reduce((a, p) => a + (p.videos ? p.videos.filter(v => v.completed).length : 0), 0);
+        const devPct = devTotal > 0 ? Math.round((devDone / devTotal) * 100) : 0;
+        document.getElementById('dev-progress-label-pct').textContent = `${devPct}%`;
+        document.getElementById('dev-progress-bar-fill').style.width = `${devPct}%`;
 
         // 4. Update Resume Score Card
         loadResumeScore();
 
-        // 5. Update Practice Overview KPIs
-        document.getElementById('overview-solved-count').textContent = displayCountSolved * 5; // scaled solved problems
-        document.getElementById('overview-success-rate').textContent = '85%';
-        document.getElementById('overview-streak').textContent = '12'; // contests
+        // 5. Update Practice Overview KPIs — real data
+        document.getElementById('overview-solved-count').textContent = totalSolved;
+        document.getElementById('overview-success-rate').textContent = totalSolved > 0 ? `${Math.round((counts.Easy * 100 + counts.Medium * 70 + counts.Hard * 50) / Math.max(1, totalSolved))}%` : '0%';
+        document.getElementById('overview-streak').textContent = streak;
 
         // 6. Draw Dashboard Consistency Chart
         drawDashboardConsistencyChart(solved);
@@ -1085,14 +1114,14 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('dashboard-resume-skills').textContent = data.match;
             document.getElementById('dashboard-resume-ats').textContent = typeof data.ats === 'number' ? `${data.ats}%` : data.ats;
         } else {
-            // Default mockup state
-            document.getElementById('dashboard-resume-score').textContent = '85/100';
+            // No resume uploaded yet — show empty state
+            document.getElementById('dashboard-resume-score').textContent = '—/100';
             const verdictEl = document.getElementById('dashboard-resume-verdict');
-            verdictEl.textContent = 'Excellent';
-            verdictEl.className = 'score-verdict text-success';
-            document.getElementById('dashboard-resume-impact').textContent = 'Strong';
-            document.getElementById('dashboard-resume-skills').textContent = 'High';
-            document.getElementById('dashboard-resume-ats').textContent = 'Good';
+            verdictEl.textContent = 'Not analyzed yet';
+            verdictEl.className = 'score-verdict';
+            document.getElementById('dashboard-resume-impact').textContent = '—';
+            document.getElementById('dashboard-resume-skills').textContent = '—';
+            document.getElementById('dashboard-resume-ats').textContent = '—';
         }
     };
 
@@ -1151,13 +1180,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (charts.dashDist) charts.dashDist.destroy();
 
+        // Calculate real distribution from solved DSA + saved playlists
+        const solved = getSolvedQuestions();
+        const savedPl = getSavedPlaylists();
+        const dsaCount = solved.length;
+        const sdCount = savedPl.filter(p => (p.title + ' ' + (p.skill || '')).toLowerCase().includes('system')).length;
+        const aiCount = savedPl.filter(p => /(ai|ml|machine|deep|neural)/i.test(p.title + ' ' + (p.skill || ''))).length;
+        const devCount = savedPl.filter(p => {
+            const t = (p.title + ' ' + (p.skill || '')).toLowerCase();
+            return !t.includes('system') && !/(ai|ml|machine|deep|neural)/i.test(t);
+        }).length;
+
+        // If no data at all, show equal placeholder
+        const hasData = dsaCount + sdCount + aiCount + devCount > 0;
+        const chartData = hasData ? [dsaCount, sdCount, aiCount, devCount] : [1, 1, 1, 1];
+
         charts.dashDist = new Chart(ctx, {
             type: 'doughnut',
             data: {
                 labels: ['DSA', 'System Design', 'AI/ML', 'Development'],
                 datasets: [{
-                    data: [35, 27, 18, 20],
-                    backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#6366f1'],
+                    data: chartData,
+                    backgroundColor: hasData
+                        ? ['#3b82f6', '#10b981', '#f59e0b', '#6366f1']
+                        : ['#e5e7eb', '#e5e7eb', '#e5e7eb', '#e5e7eb'],
                     borderWidth: 4,
                     borderColor: '#ffffff',
                     hoverOffset: 4
@@ -1178,12 +1224,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (charts.sparkline) charts.sparkline.destroy();
 
+        // Calculate real activity per day for last 7 days
+        const solved = getSolvedQuestions();
+        const last7 = [];
+        for (let i = 6; i >= 0; i--) {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            const dayStr = d.toDateString();
+            const count = solved.filter(s => new Date(s.solvedAt).toDateString() === dayStr).length;
+            last7.push(count);
+        }
+
         charts.sparkline = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: [1, 2, 3, 4, 5, 6, 7],
                 datasets: [{
-                    data: [10, 15, 8, 22, 18, 25, 30],
+                    data: last7,
                     borderColor: '#f97316',
                     borderWidth: 2,
                     fill: false,
