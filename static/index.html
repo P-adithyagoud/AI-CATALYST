@@ -256,6 +256,24 @@
                         </div>
                     </div>
 
+                    <!-- Saved Playlists Progress Card -->
+                    <div class="card card-saved-playlists" style="grid-column: span 2;">
+                        <h3 class="card-heading">Saved Playlists & Progress</h3>
+                        <div style="display:flex; gap:24px; margin-bottom:20px; flex-wrap:wrap;">
+                            <div style="background:var(--bg-main); border:1px solid var(--border); padding:12px 20px; border-radius:var(--radius-md); display:flex; flex-direction:column; gap:4px; min-width:140px;">
+                                <span style="font-size:0.75rem; color:var(--text-muted); font-weight:600; text-transform:uppercase;">Playlists Saved</span>
+                                <strong id="saved-playlists-count" style="font-size:1.5rem; color:var(--text-main); font-family:'Outfit',sans-serif;">0</strong>
+                            </div>
+                            <div style="background:var(--bg-main); border:1px solid var(--border); padding:12px 20px; border-radius:var(--radius-md); display:flex; flex-direction:column; gap:4px; min-width:140px;">
+                                <span style="font-size:0.75rem; color:var(--text-muted); font-weight:600; text-transform:uppercase;">Completed</span>
+                                <strong id="completed-playlists-count" style="font-size:1.5rem; color:var(--success); font-family:'Outfit',sans-serif;">0</strong>
+                            </div>
+                        </div>
+                        <div id="saved-playlists-list" style="display:flex; flex-direction:column; gap:16px;">
+                            <p class="empty-state" style="padding:10px 0; font-size:0.9rem; margin:0;">No playlists saved yet. Go to the Learning tab to search and save playlists.</p>
+                        </div>
+                    </div>
+
                     <!-- Skill Distribution Card -->
                     <div class="card card-distribution">
                         <h3 class="card-heading">Skill Distribution</h3>

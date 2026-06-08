@@ -894,6 +894,88 @@ Return only valid JSON."""
 
 
 # ──────────────────────────────────────────────
+# 5b. Get Real Playlist Videos from YouTube API
+# ──────────────────────────────────────────────
+
+@app.route("/get-playlist-videos", methods=["GET"])
+def get_playlist_videos():
+    """
+    Fetch real video titles from a YouTube playlist using the YouTube Data API.
+    Query param: playlist_url=https://www.youtube.com/playlist?list=XXXXX
+    Returns: { videos: [{id, title, videoId, position}], total: N }
+    """
+    playlist_url = request.args.get("playlist_url", "")
+    if not playlist_url:
+        return jsonify({"error": "playlist_url param required"}), 400
+
+    # Extract playlist ID from URL
+    import re
+    match = re.search(r'list=([A-Za-z0-9_\-]+)', playlist_url)
+    if not match:
+        return jsonify({"error": "Invalid playlist URL"}), 400
+
+    playlist_id = match.group(1)
+
+    if not YOUTUBE_API_KEY or YOUTUBE_API_KEY == "your_youtube_api_key_here":
+        return jsonify({"error": "YouTube API key not configured"}), 500
+
+    all_videos = []
+    next_page_token = None
+
+    try:
+        while True:
+            params = {
+                "part": "snippet",
+                "playlistId": playlist_id,
+                "maxResults": 50,
+                "key": YOUTUBE_API_KEY
+            }
+            if next_page_token:
+                params["pageToken"] = next_page_token
+
+            resp = requests.get(
+                "https://www.googleapis.com/youtube/v3/playlistItems",
+                params=params,
+                timeout=10
+            )
+            data = resp.json()
+
+            if "error" in data:
+                print(f"[YT-VIDEOS] API error: {data['error']}")
+                return jsonify({"error": data["error"].get("message", "YouTube API error")}), 500
+
+            for item in data.get("items", []):
+                snippet = item.get("snippet", {})
+                resource = snippet.get("resourceId", {})
+                video_id = resource.get("videoId", "")
+                title = snippet.get("title", "")
+                position = snippet.get("position", len(all_videos))
+
+                # Skip deleted/private videos
+                if title in ("Deleted video", "Private video"):
+                    continue
+
+                all_videos.append({
+                    "id": position + 1,
+                    "title": title,
+                    "videoId": video_id,
+                    "url": f"https://www.youtube.com/watch?v={video_id}",
+                    "completed": False
+                })
+
+            next_page_token = data.get("nextPageToken")
+            if not next_page_token:
+                break
+
+        print(f"[YT-VIDEOS] Fetched {len(all_videos)} videos for playlist {playlist_id}")
+        return jsonify({"videos": all_videos, "total": len(all_videos)})
+
+    except Exception as e:
+        print(f"[YT-VIDEOS] Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ──────────────────────────────────────────────
 # 6. Interview Prep (LeetCode)
 # ──────────────────────────────────────────────
 
@@ -1186,6 +1268,50 @@ def get_user_projects():
         return jsonify([])
     except Exception as e:
         print(f"[PROJECTS] Get failed: {e}")
+        return jsonify([])
+
+@app.route("/sync-saved-playlists", methods=["POST"])
+def sync_saved_playlists():
+    if not session.get("logged_in") or not session.get("user_id"):
+        return jsonify({"error": "Unauthorized"}), 401
+    body = request.get_json(silent=True) or {}
+    playlists_list = body.get("playlists_list", [])
+    
+    sb = get_sb()
+    if not sb:
+        return jsonify({"error": "DB unavailable"}), 500
+        
+    try:
+        sb.table("learning_progress").upsert({
+            "session_id": session["user_id"],
+            "skill_name": "saved_playlists",
+            "completed_steps": playlists_list,
+            "completion_pct": 100.0
+        }, on_conflict="session_id, skill_name").execute()
+        return jsonify({"status": "success"})
+    except Exception as e:
+        print(f"[PLAYLISTS] Sync failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/get-saved-playlists", methods=["GET"])
+def get_saved_playlists():
+    if not session.get("logged_in") or not session.get("user_id"):
+        return jsonify([])
+    sb = get_sb()
+    if not sb:
+        return jsonify([])
+    try:
+        res = sb.table("learning_progress")\
+                .select("completed_steps")\
+                .eq("session_id", session["user_id"])\
+                .eq("skill_name", "saved_playlists")\
+                .limit(1)\
+                .execute()
+        if res.data:
+            return jsonify(res.data[0].get("completed_steps", []))
+        return jsonify([])
+    except Exception as e:
+        print(f"[PLAYLISTS] Get failed: {e}")
         return jsonify([])
 
 @app.route("/")

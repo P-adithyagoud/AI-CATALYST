@@ -47,6 +47,362 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentSkill = '';
     let currentResults = {};
 
+    // Saved playlists management state and actions
+    const generateVideosForPlaylist = (title, skill) => {
+        const t = (title + ' ' + (skill || '')).toLowerCase();
+        let topics = [];
+        if (t.includes('java') && !t.includes('javascript')) {
+            topics = [
+                "Introduction to Java & Setup",
+                "Variables and Data Types in Java",
+                "Operators & Conditional Logic",
+                "Loops in Java (For, While)",
+                "Classes, Objects & Constructors",
+                "Method Overloading & Overriding",
+                "Inheritance & Polymorphism",
+                "Abstraction & Interfaces",
+                "Packages & Access Modifiers",
+                "Exception Handling in Java"
+            ];
+        } else if (t.includes('python')) {
+            topics = [
+                "Python Installation & Basics",
+                "Control Flow and Loops",
+                "Functions & Argument Scope",
+                "Lists, Tuples & Dictionaries",
+                "File I/O Operations",
+                "Object Oriented Python Basics",
+                "Modules and PIP Packages",
+                "Exception Handling in Python",
+                "Lambda & List Comprehensions",
+                "Intro to Pandas & NumPy"
+            ];
+        } else if (t.includes('c++') || t.includes('cpp')) {
+            topics = [
+                "C++ Introduction & Setup",
+                "Variables, Constants & Operators",
+                "Control Statements & Loops",
+                "Functions & Memory Addresses",
+                "Pointers and References",
+                "Array Manipulation",
+                "Classes and Object Instantiation",
+                "Inheritance & Polymorphism",
+                "STL Containers & Iterators",
+                "File Streams & Exceptions"
+            ];
+        } else if (t.includes('c ') || t.startsWith('c ') || t.includes(' c ') || t.endsWith(' c') || t.includes('c datastructure') || t.includes('data structure')) {
+            topics = [
+                "Introduction to DSA & Big O",
+                "Arrays & Dynamic Arrays",
+                "Singly and Doubly Linked Lists",
+                "Stacks & Queues",
+                "Recursion & Binary Search",
+                "Trees & Binary Search Trees",
+                "Heaps & Priority Queues",
+                "Graphs Representation (BFS/DFS)",
+                "Hashing & Hash Maps",
+                "Sorting Algorithms Complexity"
+            ];
+        } else {
+            // General fallback
+            topics = [
+                "Introduction & Overview",
+                "Environment Setup",
+                "Variables & Operations",
+                "Conditionals & Control Flow",
+                "Functions & Parameters",
+                "Working with Collections",
+                "Errors & Exception Handling",
+                "Debugging Techniques",
+                "Mini-Project Implementation",
+                "Final Review & Next Steps"
+            ];
+        }
+        
+        return topics.map((topicName, idx) => ({
+            id: idx + 1,
+            title: topicName,
+            completed: false
+        }));
+    };
+
+    const getSavedPlaylists = () => {
+        try {
+            const saved = JSON.parse(localStorage.getItem('saved_playlists')) || [];
+            let changed = false;
+            const enriched = saved.map(p => {
+                if (!p.videos || p.videos.length === 0) {
+                    p.videos = generateVideosForPlaylist(p.title, p.skill);
+                    changed = true;
+                }
+                return p;
+            });
+            if (changed) {
+                localStorage.setItem('saved_playlists', JSON.stringify(enriched));
+            }
+            return enriched;
+        } catch {
+            return [];
+        }
+    };
+
+    const togglePlaylistSave = async (playlist, btnEl) => {
+        let saved = getSavedPlaylists();
+        const index = saved.findIndex(p => p.url === playlist.url);
+        if (index > -1) {
+            // Remove it
+            saved.splice(index, 1);
+            if (btnEl) {
+                btnEl.textContent = '💾 Save';
+                btnEl.classList.remove('saved');
+            }
+            showToast('Removed from saved playlists');
+            localStorage.setItem('saved_playlists', JSON.stringify(saved));
+            syncSavedPlaylists(saved);
+            renderSavedPlaylists();
+        } else {
+            // Add it — fetch real videos from YouTube API
+            playlist.savedAt = new Date().toISOString();
+            playlist.completed = false;
+
+            if (btnEl) {
+                btnEl.textContent = '⏳ Loading...';
+                btnEl.disabled = true;
+            }
+
+            try {
+                const resp = await fetch(`/get-playlist-videos?playlist_url=${encodeURIComponent(playlist.url)}`);
+                const data = await resp.json();
+                if (data.videos && data.videos.length > 0) {
+                    playlist.videos = data.videos;
+                    showToast(`Saved! ${data.total} videos loaded from playlist`);
+                } else {
+                    // Fallback to generated videos
+                    playlist.videos = generateVideosForPlaylist(playlist.title, playlist.skill);
+                    showToast('Saved! (Using estimated video list)');
+                }
+            } catch (err) {
+                console.error('Failed to fetch playlist videos:', err);
+                playlist.videos = generateVideosForPlaylist(playlist.title, playlist.skill);
+                showToast('Saved! (Using estimated video list)');
+            }
+
+            saved.push(playlist);
+            if (btnEl) {
+                btnEl.textContent = '✅ Saved';
+                btnEl.classList.add('saved');
+                btnEl.disabled = false;
+            }
+            localStorage.setItem('saved_playlists', JSON.stringify(saved));
+            syncSavedPlaylists(saved);
+            renderSavedPlaylists();
+        }
+    };
+
+    const togglePlaylistCompleted = (url, isChecked) => {
+        let saved = getSavedPlaylists();
+        const playlist = saved.find(p => p.url === url);
+        if (playlist) {
+            playlist.completed = isChecked;
+            playlist.completedAt = isChecked ? new Date().toISOString() : null;
+            if (!playlist.videos) {
+                playlist.videos = generateVideosForPlaylist(playlist.title, playlist.skill);
+            }
+            playlist.videos.forEach(v => {
+                v.completed = isChecked;
+            });
+            localStorage.setItem('saved_playlists', JSON.stringify(saved));
+            syncSavedPlaylists(saved);
+            renderSavedPlaylists();
+            showToast(isChecked ? 'All videos completed!' : 'Marked incomplete');
+        }
+    };
+
+    const toggleVideoCompleted = (playlistUrl, videoId, isChecked) => {
+        let saved = getSavedPlaylists();
+        const playlist = saved.find(p => p.url === playlistUrl);
+        if (playlist) {
+            if (!playlist.videos) {
+                playlist.videos = generateVideosForPlaylist(playlist.title, playlist.skill);
+            }
+            const video = playlist.videos.find(v => v.id === videoId);
+            if (video) {
+                video.completed = isChecked;
+            }
+            
+            // Re-calculate playlist completion
+            const total = playlist.videos.length;
+            const completedCount = playlist.videos.filter(v => v.completed).length;
+            playlist.completed = (completedCount === total);
+            playlist.completedAt = playlist.completed ? new Date().toISOString() : null;
+
+            localStorage.setItem('saved_playlists', JSON.stringify(saved));
+            syncSavedPlaylists(saved);
+            renderSavedPlaylists();
+            
+            showToast(`Video marked ${isChecked ? 'completed' : 'incomplete'} (${completedCount}/${total})`);
+        }
+    };
+
+    const removePlaylist = (url) => {
+        let saved = getSavedPlaylists();
+        saved = saved.filter(p => p.url !== url);
+        localStorage.setItem('saved_playlists', JSON.stringify(saved));
+        syncSavedPlaylists(saved);
+        renderSavedPlaylists();
+        showToast('Removed playlist');
+        
+        // Also update any visible buttons on screen
+        document.querySelectorAll(`.btn-save-playlist[data-url="${url}"]`).forEach(btn => {
+            btn.textContent = '💾 Save';
+            btn.classList.remove('saved');
+        });
+    };
+
+    const syncSavedPlaylists = async (savedList) => {
+        try {
+            await fetch('/sync-saved-playlists', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ playlists_list: savedList })
+            });
+        } catch (e) {
+            console.error("Failed to sync saved playlists to DB:", e);
+        }
+    };
+
+    const renderSavedPlaylists = () => {
+        const saved = getSavedPlaylists();
+        const savedCountEl = document.getElementById('saved-playlists-count');
+        const completedCountEl = document.getElementById('completed-playlists-count');
+        const listContainer = document.getElementById('saved-playlists-list');
+
+        if (savedCountEl) savedCountEl.textContent = saved.length;
+        
+        const completedCount = saved.filter(p => p.completed).length;
+        if (completedCountEl) completedCountEl.textContent = completedCount;
+
+        if (!listContainer) return;
+
+        if (saved.length === 0) {
+            listContainer.innerHTML = `<p class="empty-state" style="padding:10px 0; font-size:0.9rem; margin:0;">No playlists saved yet. Go to the Learning tab to search and save playlists.</p>`;
+            return;
+        }
+
+        listContainer.innerHTML = '';
+        saved.forEach(p => {
+            const card = document.createElement('div');
+            card.className = 'saved-playlist-card';
+            
+            const totalCount = p.videos.length;
+            const completedCount = p.videos.filter(v => v.completed).length;
+            const progressPct = Math.round((completedCount / totalCount) * 100);
+
+            card.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
+                    <div class="saved-playlist-info">
+                        <div class="saved-playlist-title">${escapeHTML(p.title)}</div>
+                        <div class="saved-playlist-meta">
+                            ${escapeHTML(p.channel)} | ${escapeHTML(p.skill)} | ${escapeHTML(p.level)}
+                        </div>
+                    </div>
+                    <div class="saved-playlist-actions" style="margin-left: auto;">
+                        <label class="saved-playlist-check">
+                            <input type="checkbox" class="playlist-complete-checkbox" data-url="${escapeHTML(p.url)}" ${p.completed ? 'checked' : ''}>
+                            <span>${p.completed ? '✅ Done' : 'Mark Done'}</span>
+                        </label>
+                        <a href="${p.url}" target="_blank" class="btn-watch" style="padding: 6px 12px; font-size: 0.75rem; border-radius: var(--radius-sm);">Watch</a>
+                        <button class="btn-remove-saved" data-url="${escapeHTML(p.url)}">Delete</button>
+                    </div>
+                </div>
+                
+                <!-- Progress Bar -->
+                <div style="margin-top: 12px;">
+                    <div style="width: 100%; height: 6px; background: var(--border); border-radius: 99px; overflow: hidden; margin-bottom: 4px;">
+                        <div style="width: ${progressPct}%; height: 100%; background: var(--success); transition: width 0.3s var(--smooth);"></div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 0.75rem; color: var(--text-sub); font-weight: 500;">
+                            ${completedCount} of ${totalCount} videos completed (${progressPct}%)
+                        </span>
+                        <button class="saved-playlist-videos-toggle" data-expanded="false" style="font-size:0.75rem; color:var(--primary); background:none; border:none; cursor:pointer; font-weight:700;">
+                            ▼ Show Videos (${totalCount})
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Collapsible Video Checklist -->
+                <div class="playlist-videos-list" style="display: none;">
+                    ${p.videos.map(v => `
+                        <label class="playlist-video-item ${v.completed ? 'completed' : ''}">
+                            <input type="checkbox" class="video-checkbox" data-video-id="${v.id}" ${v.completed ? 'checked' : ''}>
+                            <span>${v.id}. ${escapeHTML(v.title)}</span>
+                            ${v.videoId ? `<a href="https://www.youtube.com/watch?v=${v.videoId}" target="_blank" class="video-play-link" title="Watch on YouTube">▶</a>` : ''}
+                        </label>
+                    `).join('')}
+                </div>
+            `;
+
+            // Expand/Collapse Listener
+            const toggleBtn = card.querySelector('.saved-playlist-videos-toggle');
+            const videosList = card.querySelector('.playlist-videos-list');
+            toggleBtn.addEventListener('click', () => {
+                const isExpanded = toggleBtn.getAttribute('data-expanded') === 'true';
+                if (isExpanded) {
+                    videosList.style.display = 'none';
+                    toggleBtn.setAttribute('data-expanded', 'false');
+                    toggleBtn.textContent = `▼ Show Videos (${totalCount})`;
+                } else {
+                    videosList.style.display = 'flex';
+                    toggleBtn.setAttribute('data-expanded', 'true');
+                    toggleBtn.textContent = `▲ Hide Videos`;
+                }
+            });
+
+            // General Playlist Completion Checkbox Listener
+            card.querySelector('.playlist-complete-checkbox').addEventListener('change', (e) => {
+                togglePlaylistCompleted(p.url, e.target.checked);
+            });
+
+            // Individual Video Checkboxes Listeners
+            card.querySelectorAll('.video-checkbox').forEach(cb => {
+                cb.addEventListener('change', (e) => {
+                    const videoId = parseInt(e.target.getAttribute('data-video-id'));
+                    toggleVideoCompleted(p.url, videoId, e.target.checked);
+                });
+            });
+
+            card.querySelector('.btn-remove-saved').addEventListener('click', () => {
+                removePlaylist(p.url);
+            });
+
+            listContainer.appendChild(card);
+        });
+    };
+
+    const initSavedPlaylists = async () => {
+        try {
+            const res = await fetch('/get-saved-playlists');
+            if (res.ok) {
+                const list = await res.json();
+                if (Array.isArray(list)) {
+                    // Only generate fallback videos for playlists that have no videos at all
+                    // Don't overwrite playlists that already have real YouTube API videos
+                    const enrichedList = list.map(p => {
+                        if (!p.videos || p.videos.length === 0) {
+                            p.videos = generateVideosForPlaylist(p.title, p.skill);
+                        }
+                        return p;
+                    });
+                    localStorage.setItem('saved_playlists', JSON.stringify(enrichedList));
+                }
+            }
+        } catch (e) {
+            console.error("Failed to fetch saved playlists from DB:", e);
+        }
+        renderSavedPlaylists();
+    };
+
     // Silent click tracker
     const trackClick = (url, title, action = 'click') => {
         if (!url || url === '#') return;
@@ -152,6 +508,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const card = document.createElement('div');
         card.className = 'resource-card show';
         const vStatus = data.verification_status ? `<span class="pill-badge" style="background: #059669; color: white; margin-left: auto;">${escapeHTML(data.verification_status)}</span>` : '';
+        
+        const savedList = getSavedPlaylists();
+        const isSaved = savedList.some(p => p.url === data.url);
+        const saveBtnLabel = isSaved ? '✅ Saved' : '💾 Save';
+        const saveBtnClass = isSaved ? 'btn-save-playlist saved' : 'btn-save-playlist';
+
         card.innerHTML = `
             <div class="card-header" style="flex-wrap: wrap;">
                 <span class="pill-badge" style="background: var(--primary); color: white;">${escapeHTML(category.toUpperCase())}</span>
@@ -162,10 +524,30 @@ document.addEventListener('DOMContentLoaded', () => {
             <span class="channel-name">${escapeHTML(data.channel)}</span>
             <p class="card-desc" style="margin-top: 10px;"><strong>💡 Why:</strong> ${escapeHTML(data.why_selected)}</p>
             <p class="card-desc"><strong>⏱️ Time:</strong> ${escapeHTML(data.estimated_time)} | <strong>🎯 Outcome:</strong> ${escapeHTML(data.expected_outcome)}</p>
-            <a href="${data.url}" target="_blank" class="btn-watch" rel="noopener noreferrer"
-               style="background: var(--primary); border-color: transparent;"
-               onclick="trackClickGlobal('${data.url.replace(/'/g,"\\'")}',' ${escapeHTML(data.title).replace(/'/g,"\\'")}')">Watch Playlist</a>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: auto;">
+                <a href="${data.url}" target="_blank" class="btn-watch" rel="noopener noreferrer"
+                   style="background: var(--primary); border-color: transparent;"
+                   onclick="trackClickGlobal('${data.url.replace(/'/g,"\\'")}',' ${escapeHTML(data.title).replace(/'/g,"\\'")}')">Watch Playlist</a>
+                <button class="${saveBtnClass}" data-url="${escapeHTML(data.url)}">
+                    ${saveBtnLabel}
+                </button>
+            </div>
         `;
+
+        const saveBtn = card.querySelector('.btn-save-playlist');
+        saveBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            togglePlaylistSave({
+                title: data.title,
+                channel: data.channel,
+                url: data.url,
+                duration: data.estimated_time || 'Full',
+                level: 'All',
+                skill: category
+            }, saveBtn);
+        });
+
         return card;
     };
 
@@ -278,6 +660,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const btnLabel = isCert ? 'Join Course' : 'Watch Playlist';
 
         const vBadge = data.verification_status ? `<span class="pill-badge" style="background: #059669; color: white;">${escapeHTML(data.verification_status)}</span>` : '';
+        
+        const savedList = getSavedPlaylists();
+        const isSaved = savedList.some(p => p.url === url);
+        const saveBtnLabel = isSaved ? '✅ Saved' : '💾 Save';
+        const saveBtnClass = isSaved ? 'btn-save-playlist saved' : 'btn-save-playlist';
+
         card.innerHTML = `
             <div class="card-header" style="flex-wrap: wrap;">
                 <span class="rank-badge">#${rank}</span>
@@ -290,11 +678,30 @@ document.addEventListener('DOMContentLoaded', () => {
             <h3 class="card-title">${escapeHTML(title)}</h3>
             <span class="channel-name">${escapeHTML(channel)}</span>
             <p class="card-desc">${escapeHTML(desc)}</p>
-            <a href="${url}" target="_blank" class="btn-watch" rel="noopener noreferrer">
-                ${btnLabel}
-            </a>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: auto;">
+                <a href="${url}" target="_blank" class="btn-watch" rel="noopener noreferrer">
+                    ${btnLabel}
+                </a>
+                <button class="${saveBtnClass}" data-url="${escapeHTML(url)}">
+                    ${saveBtnLabel}
+                </button>
+            </div>
         `;
         
+        const saveBtn = card.querySelector('.btn-save-playlist');
+        saveBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            togglePlaylistSave({
+                title,
+                channel,
+                url,
+                duration,
+                level,
+                skill: currentSkill || level
+            }, saveBtn);
+        });
+
         return card;
     };
 
@@ -858,6 +1265,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const renderDashboardProgress = () => {
         updateCommandCenter();
+        renderSavedPlaylists();
     };
 
     // Real Resume Analysis uploader logic
@@ -1348,6 +1756,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initial render call
     updateWelcomeMessage();
     initDsaProgress();
+    initSavedPlaylists();
 
     // Expose trackClick globally for inline onclick handlers
     window.trackClickGlobal = (url, title) => trackClick(url, title, 'click');
