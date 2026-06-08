@@ -1080,6 +1080,106 @@ document.addEventListener('DOMContentLoaded', () => {
     tabCertificates.addEventListener('click', () => renderStep('certificates'));
     tabRoadmap.addEventListener('click', () => renderStep('roadmap'));
 
+    // ── Student Projects Management ──
+    const projectsListContainer = document.getElementById('projects-list-container');
+    const addProjectForm = document.getElementById('add-project-form');
+
+    const defaultProjects = [
+        { title: "Distributed Rate Limiter", category: "Backend", desc: "Build an API rate limiter service in Go/Python utilizing Redis token bucket algorithm." },
+        { title: "Realtime Collaborative Editor", category: "Fullstack", desc: "Create a dynamic text editor using WebSockets and Operational Transformation patterns." }
+    ];
+
+    let customProjects = [];
+
+    const loadProjects = async () => {
+        try {
+            const res = await fetch('/get-user-projects');
+            if (res.ok) {
+                const list = await res.json();
+                if (Array.isArray(list)) {
+                    customProjects = list;
+                }
+            }
+        } catch (e) {
+            console.error("Failed to load custom projects:", e);
+        }
+        renderProjectsList();
+    };
+
+    const renderProjectsList = () => {
+        if (!projectsListContainer) return;
+        projectsListContainer.innerHTML = '';
+
+        // Render recommended blueprints
+        defaultProjects.forEach(p => {
+            const card = document.createElement('div');
+            card.className = 'card show';
+            card.innerHTML = `
+                <div class="card-header">
+                    <span class="pill-badge" style="background:var(--primary-light); color:var(--primary); font-weight:700;">${escapeHTML(p.category)}</span>
+                </div>
+                <h3 class="card-title" style="margin-top:8px;">${escapeHTML(p.title)}</h3>
+                <p class="card-desc" style="margin-bottom:0;">${escapeHTML(p.desc)}</p>
+            `;
+            projectsListContainer.appendChild(card);
+        });
+
+        // Render student's custom projects
+        customProjects.forEach((p, idx) => {
+            const card = document.createElement('div');
+            card.className = 'card show';
+            card.innerHTML = `
+                <div class="card-header">
+                    <span class="pill-badge" style="background:var(--success-light); color:var(--success); font-weight:700;">${escapeHTML(p.category)}</span>
+                    <button class="btn-back btn-delete-project" data-index="${idx}" style="margin-left:auto; padding:2px 8px; color:var(--danger); border-color:rgba(239,68,68,0.2); background:var(--danger-light); font-size:0.75rem;">Delete</button>
+                </div>
+                <h3 class="card-title" style="margin-top:8px;">${escapeHTML(p.title)}</h3>
+                <p class="card-desc" style="margin-bottom:0;">${escapeHTML(p.desc)}</p>
+            `;
+            projectsListContainer.appendChild(card);
+        });
+
+        // Add event listeners to delete buttons
+        document.querySelectorAll('.btn-delete-project').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const index = parseInt(e.target.getAttribute('data-index'));
+                customProjects.splice(index, 1);
+                await syncProjects();
+                renderProjectsList();
+            });
+        });
+    };
+
+    const syncProjects = async () => {
+        try {
+            await fetch('/sync-user-projects', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ projects_list: customProjects })
+            });
+        } catch (e) {
+            console.error("Failed to sync custom projects:", e);
+        }
+    };
+
+    if (addProjectForm) {
+        addProjectForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const title = document.getElementById('project-title').value.trim();
+            const category = document.getElementById('project-category').value.trim();
+            const desc = document.getElementById('project-desc').value.trim();
+
+            if (!title || !category || !desc) return;
+
+            customProjects.push({ title, category, desc });
+            addProjectForm.reset();
+
+            await syncProjects();
+            renderProjectsList();
+            showToast('✅ Project added successfully!');
+        });
+    }
+
     // ── Sidebar Router Logic ──────────────────────────────────────
     const navItems = document.querySelectorAll('.sidebar .nav-item');
     const views = document.querySelectorAll('.content-view');
@@ -1105,6 +1205,8 @@ document.addEventListener('DOMContentLoaded', () => {
             emptyState.style.display = 'block';
         } else if (targetViewId === 'view-analytics') {
             renderAnalyticsCharts();
+        } else if (targetViewId === 'view-projects') {
+            loadProjects();
         }
     };
 

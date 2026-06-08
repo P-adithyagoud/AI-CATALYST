@@ -599,20 +599,38 @@
             <section id="view-projects" class="content-view">
                 <div class="welcome-banner">
                     <div>
-                        <h1 class="welcome-title">Dynamic Projects</h1>
-                        <p class="welcome-subtitle">AI-recommended project blueprints to build a stellar portfolio.</p>
+                        <h1 class="welcome-title">Projects Workspace</h1>
+                        <p class="welcome-subtitle">Manage your project portfolio and view recommended blueprints.</p>
                     </div>
                 </div>
-                <div id="projects-list-container" class="results-grid">
+                
+                <div class="projects-layout" style="display:grid; grid-template-columns: 320px 1fr; gap:24px; align-items:start;">
+                    <!-- Left: Form Card -->
                     <div class="card">
-                        <span class="pill-badge" style="width:fit-content; margin-bottom:12px;">Backend</span>
-                        <h3 class="card-title">Distributed Rate Limiter</h3>
-                        <p class="card-desc">Build an API rate limiter service in Go/Python utilizing Redis token bucket algorithm.</p>
+                        <h3 class="card-heading" style="margin-bottom: 16px;">Add Custom Project</h3>
+                        <form id="add-project-form" style="display:flex; flex-direction:column; gap:16px;">
+                            <div>
+                                <label class="input-label">Project Title</label>
+                                <input type="text" id="project-title" class="skill-input" placeholder="e.g. Portfolio Website" required style="padding:10px 14px; font-size: 0.9rem;">
+                            </div>
+                            <div>
+                                <label class="input-label">Category / Tech Stack</label>
+                                <input type="text" id="project-category" class="skill-input" placeholder="e.g. Frontend, React" required style="padding:10px 14px; font-size: 0.9rem;">
+                            </div>
+                            <div>
+                                <label class="input-label">Description</label>
+                                <textarea id="project-desc" class="skill-input" placeholder="What does the project do?" required style="padding:10px 14px; min-height:80px; font-family:inherit; resize:vertical; font-size: 0.9rem;"></textarea>
+                            </div>
+                            <button type="submit" class="cta-button" style="padding:12px; font-size:0.9rem;">Add Project</button>
+                        </form>
                     </div>
-                    <div class="card">
-                        <span class="pill-badge" style="width:fit-content; margin-bottom:12px;">Fullstack</span>
-                        <h3 class="card-title">Realtime Collaborative Editor</h3>
-                        <p class="card-desc">Create a dynamic text editor using WebSockets and Operational Transformation patterns.</p>
+
+                    <!-- Right: Projects Grid -->
+                    <div style="display:flex; flex-direction:column; gap:20px;">
+                        <h3 class="card-heading" style="margin:0;">Project Portfolio</h3>
+                        <div id="projects-list-container" class="results-grid" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
+                            <!-- Injected dynamically -->
+                        </div>
                     </div>
                 </div>
             </section>

@@ -1144,6 +1144,50 @@ def get_dsa_progress():
         print(f"[DSA] Get failed: {e}")
         return jsonify([])
 
+@app.route("/sync-user-projects", methods=["POST"])
+def sync_user_projects():
+    if not session.get("logged_in") or not session.get("user_id"):
+        return jsonify({"error": "Unauthorized"}), 401
+    body = request.get_json(silent=True) or {}
+    projects_list = body.get("projects_list", [])
+    
+    sb = get_sb()
+    if not sb:
+        return jsonify({"error": "DB unavailable"}), 500
+        
+    try:
+        sb.table("learning_progress").upsert({
+            "session_id": session["user_id"],
+            "skill_name": "user_projects",
+            "completed_steps": projects_list,
+            "completion_pct": 100.0
+        }, on_conflict="session_id, skill_name").execute()
+        return jsonify({"status": "success"})
+    except Exception as e:
+        print(f"[PROJECTS] Sync failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/get-user-projects", methods=["GET"])
+def get_user_projects():
+    if not session.get("logged_in") or not session.get("user_id"):
+        return jsonify([])
+    sb = get_sb()
+    if not sb:
+        return jsonify([])
+    try:
+        res = sb.table("learning_progress")\
+                .select("completed_steps")\
+                .eq("session_id", session["user_id"])\
+                .eq("skill_name", "user_projects")\
+                .limit(1)\
+                .execute()
+        if res.data:
+            return jsonify(res.data[0].get("completed_steps", []))
+        return jsonify([])
+    except Exception as e:
+        print(f"[PROJECTS] Get failed: {e}")
+        return jsonify([])
+
 @app.route("/")
 def index():
     if not session.get("logged_in"):
