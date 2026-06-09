@@ -1326,6 +1326,128 @@ def get_saved_playlists():
         print(f"[PLAYLISTS] Get failed: {e}")
         return jsonify([])
 
+@app.route("/sync-active-roadmap", methods=["POST"])
+def sync_active_roadmap():
+    if not session.get("logged_in") or not session.get("user_id"):
+        return jsonify({"error": "Unauthorized"}), 401
+    body = request.get_json(silent=True) or {}
+    
+    sb = get_sb()
+    if not sb:
+        return jsonify({"error": "DB unavailable"}), 500
+        
+    try:
+        if not body:
+            # Untrack roadmap by deleting active_roadmap row
+            sb.table("learning_progress").delete().eq("session_id", session["user_id"]).eq("skill_name", "active_roadmap").execute()
+            return jsonify({"status": "success"})
+
+        skill = body.get("skill")
+        level = body.get("level")
+        steps = body.get("steps", [])
+        pct = float(body.get("completion_pct", 0.0))
+        
+        roadmap_data = {
+            "skill": skill,
+            "level": level,
+            "steps": steps
+        }
+        
+        sb.table("learning_progress").upsert({
+            "session_id": session["user_id"],
+            "skill_name": "active_roadmap",
+            "completed_steps": roadmap_data,
+            "completion_pct": pct
+        }, on_conflict="session_id, skill_name").execute()
+        return jsonify({"status": "success"})
+    except Exception as e:
+        print(f"[ROADMAP] Sync failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/get-active-roadmap", methods=["GET"])
+def get_active_roadmap():
+    if not session.get("logged_in") or not session.get("user_id"):
+        return jsonify(None)
+    sb = get_sb()
+    if not sb:
+        return jsonify(None)
+    try:
+        res = sb.table("learning_progress")\
+                .select("completed_steps, completion_pct")\
+                .eq("session_id", session["user_id"])\
+                .eq("skill_name", "active_roadmap")\
+                .limit(1)\
+                .execute()
+        if res.data:
+            row = res.data[0]
+            data = row.get("completed_steps") or {}
+            data["completion_pct"] = float(row.get("completion_pct", 0.0))
+            return jsonify(data)
+        return jsonify(None)
+    except Exception as e:
+        print(f"[ROADMAP] Get failed: {e}")
+        return jsonify(None)
+
+@app.route("/add-milestone", methods=["POST"])
+def add_milestone():
+    if not session.get("logged_in") or not session.get("user_id"):
+        return jsonify({"error": "Unauthorized"}), 401
+    body = request.get_json(silent=True) or {}
+    skill_name = body.get("skill_name")
+    outcome_type = body.get("outcome_type", "roadmap_complete")
+    outcome_detail = body.get("outcome_detail")
+    
+    if not skill_name:
+        return jsonify({"error": "skill_name is required"}), 400
+        
+    sb = get_sb()
+    if not sb:
+        return jsonify({"error": "DB unavailable"}), 500
+        
+    try:
+        # Check if duplicate milestone already exists
+        res = sb.table("success_metrics")\
+                .select("id")\
+                .eq("session_id", session["user_id"])\
+                .eq("skill_name", skill_name)\
+                .eq("outcome_type", outcome_type)\
+                .limit(1)\
+                .execute()
+                
+        if res.data:
+            return jsonify({"status": "already_exists"})
+            
+        # Insert new milestone
+        sb.table("success_metrics").insert({
+            "session_id": session["user_id"],
+            "skill_name": skill_name,
+            "outcome_type": outcome_type,
+            "outcome_detail": outcome_detail
+        }).execute()
+        
+        return jsonify({"status": "success"})
+    except Exception as e:
+        print(f"[MILESTONES] Add failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/get-milestones", methods=["GET"])
+def get_milestones():
+    if not session.get("logged_in") or not session.get("user_id"):
+        return jsonify([])
+    sb = get_sb()
+    if not sb:
+        return jsonify([])
+    try:
+        res = sb.table("success_metrics")\
+                .select("*")\
+                .eq("session_id", session["user_id"])\
+                .order("created_at", desc=True)\
+                .execute()
+        return jsonify(res.data or [])
+    except Exception as e:
+        print(f"[MILESTONES] Get failed: {e}")
+        return jsonify([])
+
 @app.route("/")
 def index():
     if not session.get("logged_in"):

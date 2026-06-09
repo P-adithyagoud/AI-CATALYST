@@ -47,6 +47,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentSkill = '';
     let currentResults = {};
 
+    // Active Roadmap state
+    let activeRoadmap = null;
+
     // Saved playlists management state and actions
     let savedPlaylists = [];
     const generateVideosForPlaylist = (title, skill) => {
@@ -400,6 +403,328 @@ document.addEventListener('DOMContentLoaded', () => {
         renderSavedPlaylists();
     };
 
+    // ── ACTIVE ROADMAP TRACKING SYSTEM ──
+    const initActiveRoadmap = async () => {
+        try {
+            const res = await fetch('/get-active-roadmap');
+            if (res.ok) {
+                const data = await res.json();
+                if (data && data.skill && data.steps) {
+                    activeRoadmap = data;
+                } else {
+                    activeRoadmap = null;
+                }
+            }
+        } catch (e) {
+            console.error("Failed to fetch active roadmap:", e);
+        }
+        renderDashboardRoadmap();
+    };
+
+    const renderDashboardRoadmap = () => {
+        const cardEmpty = document.getElementById('dashboard-active-roadmap-empty');
+        const cardContent = document.getElementById('dashboard-active-roadmap-content');
+        const metaHeader = document.getElementById('dashboard-active-roadmap-header-meta');
+        const skillBadge = document.getElementById('dashboard-active-roadmap-skill');
+        const progressText = document.getElementById('dashboard-roadmap-progress-text');
+        const pctBadge = document.getElementById('dashboard-roadmap-pct-badge');
+        const progressBar = document.getElementById('dashboard-roadmap-progress-bar');
+        const checklist = document.getElementById('dashboard-roadmap-checklist');
+
+        if (!activeRoadmap) {
+            if (metaHeader) metaHeader.style.display = 'none';
+            if (cardContent) cardContent.style.display = 'none';
+            if (cardEmpty) cardEmpty.style.display = 'flex';
+            return;
+        }
+
+        // Show active elements
+        if (cardEmpty) cardEmpty.style.display = 'none';
+        if (metaHeader) metaHeader.style.display = 'flex';
+        if (cardContent) cardContent.style.display = 'flex';
+
+        // Update titles
+        if (skillBadge) {
+            skillBadge.textContent = `${activeRoadmap.skill} (${activeRoadmap.level || 'Beginner'})`;
+        }
+
+        // Calculate progress
+        const total = activeRoadmap.steps.length;
+        const completed = activeRoadmap.steps.filter(s => s.completed).length;
+        const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+        if (progressText) {
+            progressText.textContent = `Progress: ${pct}% (${completed} / ${total} steps completed)`;
+        }
+        if (pctBadge) {
+            pctBadge.textContent = `${pct}%`;
+        }
+        if (progressBar) {
+            progressBar.style.width = `${pct}%`;
+        }
+
+        // Render steps grouped by phase
+        if (checklist) {
+            checklist.innerHTML = '';
+            const phases = [
+                { key: 'beginner', label: '🌱 Beginner Phase' },
+                { key: 'intermediate', label: '🔥 Intermediate Phase' },
+                { key: 'advanced', label: '🚀 Advanced Phase' },
+                { key: 'projects', label: '🛠️ Projects to Build' },
+                { key: 'certifications', label: '🏆 Recommended Certifications' },
+                { key: 'interview_prep', label: '💼 Interview Prep Focus' }
+            ];
+
+            phases.forEach(phase => {
+                const phaseSteps = activeRoadmap.steps.filter(s => s.phaseKey === phase.key);
+                if (phaseSteps.length > 0) {
+                    // Render Phase Header
+                    const header = document.createElement('div');
+                    header.className = 'roadmap-phase-title-group';
+                    header.innerHTML = `<span>${phase.label}</span>`;
+                    checklist.appendChild(header);
+
+                    // Render Phase Steps
+                    phaseSteps.forEach(step => {
+                        const stepEl = document.createElement('div');
+                        stepEl.className = `roadmap-step-item ${step.completed ? 'completed' : ''}`;
+                        
+                        const isProject = phase.key === 'projects';
+                        const descHtml = isProject && step.description ? `<span class="roadmap-step-desc">${escapeHTML(step.description)}</span>` : '';
+
+                        stepEl.innerHTML = `
+                            <input type="checkbox" class="roadmap-checkbox" data-step-id="${step.id}" ${step.completed ? 'checked' : ''}>
+                            <div class="roadmap-step-text-wrap">
+                                <span class="roadmap-step-title">${escapeHTML(step.title)}</span>
+                                ${descHtml}
+                            </div>
+                        `;
+
+                        // Checkbox event listener
+                        stepEl.querySelector('.roadmap-checkbox').addEventListener('change', (e) => {
+                            toggleRoadmapStep(step.id, e.target.checked);
+                        });
+
+                        checklist.appendChild(stepEl);
+                    });
+                }
+            });
+        }
+    };
+
+    const toggleRoadmapStep = async (stepId, isChecked) => {
+        if (!activeRoadmap) return;
+        activeRoadmap.steps = activeRoadmap.steps.map(s => {
+            if (s.id === stepId) {
+                s.completed = isChecked;
+            }
+            return s;
+        });
+
+        // Compute new percentage
+        const total = activeRoadmap.steps.length;
+        const completed = activeRoadmap.steps.filter(s => s.completed).length;
+        const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+        // Render dashboard card
+        renderDashboardRoadmap();
+
+        // Render Learning tab if it's currently showing the same roadmap
+        if (currentResults && currentResults.roadmap && 
+            currentResults.skill === activeRoadmap.skill && 
+            (currentResults.level || 'Beginner') === activeRoadmap.level) {
+            renderActiveRoadmapChecklistInLearning();
+        }
+
+        // Sync with backend
+        try {
+            await fetch('/sync-active-roadmap', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    skill: activeRoadmap.skill,
+                    level: activeRoadmap.level,
+                    steps: activeRoadmap.steps,
+                    completion_pct: pct
+                })
+            });
+
+            // If checked to 100% completion, automatically log milestone achievement
+            if (pct === 100) {
+                const milestoneDetail = `Completed ${activeRoadmap.skill} (${activeRoadmap.level}) roadmap!`;
+                await fetch('/add-milestone', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        skill_name: activeRoadmap.skill,
+                        outcome_type: 'roadmap_complete',
+                        outcome_detail: milestoneDetail
+                    })
+                });
+                // Reload milestones to update Profile & Analytics lists
+                initProfileMilestones();
+            }
+        } catch (e) {
+            console.error("Failed to sync active roadmap step or milestone:", e);
+        }
+    };
+
+    const renderActiveRoadmapChecklistInLearning = () => {
+        renderStep('roadmap');
+    };
+
+    // Milestones tracking
+    const initProfileMilestones = async () => {
+        try {
+            const res = await fetch('/get-milestones');
+            if (res.ok) {
+                const list = await res.json();
+                renderMilestones(list);
+            }
+        } catch (e) {
+            console.error("Failed to load milestones:", e);
+        }
+    };
+
+    const renderMilestones = (list) => {
+        const profileList = document.getElementById('profile-milestones-list');
+        const analyticsList = document.getElementById('analytics-milestones-list');
+        
+        const html = list.length > 0 ? list.map(m => `
+            <div style="background:var(--bg-main); border:1px solid var(--border); padding:14px 18px; border-radius:var(--radius-md); display:flex; align-items:center; gap:14px;">
+                <span style="font-size:1.6rem; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.05));">🏆</span>
+                <div style="display:flex; flex-direction:column; gap:3px;">
+                    <strong style="color:var(--text-main); font-size:0.925rem; line-height:1.3;">${escapeHTML(m.outcome_detail || m.skill_name)}</strong>
+                     <span style="color:var(--text-muted); font-size:0.75rem;">Earned ${new Date(m.created_at).toLocaleDateString(undefined, {year: 'numeric', month: 'long', day: 'numeric'})}</span>
+                </div>
+            </div>
+        `).join('') : `
+            <p class="empty-state" style="margin:0; padding:10px 0; font-size:0.85rem;">No milestone achievements earned yet. Complete an active roadmap to 100% to earn your first badge!</p>
+        `;
+
+        if (profileList) {
+            profileList.innerHTML = html;
+        }
+        
+        const analyticsHtml = list.length > 0 ? list.map(m => `
+            <div style="background:var(--bg-card); border:1px solid var(--border); padding:16px 20px; border-radius:var(--radius-lg); display:flex; align-items:center; gap:16px; box-shadow:var(--shadow-card); margin-bottom:12px;">
+                <div style="font-size:2rem; background:rgba(37,99,235,0.08); width:52px; height:52px; border-radius:12px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🏆</div>
+                <div style="display:flex; flex-direction:column; gap:4px; flex-grow:1;">
+                    <strong style="color:var(--text-main); font-size:1rem; font-family:'Outfit',sans-serif;">${escapeHTML(m.outcome_detail || m.skill_name)}</strong>
+                    <span style="color:var(--text-muted); font-size:0.8rem;">Career Milestone Achievement • Completed on ${new Date(m.created_at).toLocaleDateString(undefined, {year: 'numeric', month: 'long', day: 'numeric'})}</span>
+                </div>
+            </div>
+        `).join('') : `
+            <p class="empty-state" style="margin:0; padding:16px 0; font-size:0.85rem;">No completed milestones recorded yet. Finish active roadmaps to list achievements here!</p>
+        `;
+
+        if (analyticsList) {
+            analyticsList.innerHTML = analyticsHtml;
+        }
+    };
+
+    const trackRoadmapFlow = async () => {
+        if (!currentResults || !currentResults.roadmap) return;
+        
+        // Confirmation dialog if already tracking something else
+        if (activeRoadmap && (activeRoadmap.skill !== currentResults.skill || activeRoadmap.level !== (currentResults.level || 'Beginner'))) {
+            const ok = confirm(`You are already tracking an active roadmap for "${activeRoadmap.skill} (${activeRoadmap.level || 'Beginner'})". Tracking this new one will overwrite your current progress. Do you want to proceed?`);
+            if (!ok) return;
+        }
+
+        // Convert the hierarchical JSON into flat steps
+        const rm = currentResults.roadmap;
+        const steps = [];
+        let idCounter = 1;
+
+        if (Array.isArray(rm.beginner)) {
+            rm.beginner.forEach(topic => {
+                steps.push({ id: `step_${idCounter++}`, phaseKey: 'beginner', title: topic, completed: false });
+            });
+        }
+        if (Array.isArray(rm.intermediate)) {
+            rm.intermediate.forEach(topic => {
+                steps.push({ id: `step_${idCounter++}`, phaseKey: 'intermediate', title: topic, completed: false });
+            });
+        }
+        if (Array.isArray(rm.advanced)) {
+            rm.advanced.forEach(topic => {
+                steps.push({ id: `step_${idCounter++}`, phaseKey: 'advanced', title: topic, completed: false });
+            });
+        }
+        if (Array.isArray(rm.projects)) {
+            rm.projects.forEach(p => {
+                steps.push({ 
+                    id: `step_${idCounter++}`, 
+                    phaseKey: 'projects', 
+                    title: p.name || p.title || 'Project', 
+                    description: p.description || '', 
+                    completed: false 
+                });
+            });
+        }
+        if (Array.isArray(rm.certifications)) {
+            rm.certifications.forEach(cert => {
+                steps.push({ id: `step_${idCounter++}`, phaseKey: 'certifications', title: cert, completed: false });
+            });
+        }
+        if (Array.isArray(rm.interview_prep)) {
+            rm.interview_prep.forEach(prep => {
+                steps.push({ id: `step_${idCounter++}`, phaseKey: 'interview_prep', title: prep, completed: false });
+            });
+        }
+
+        activeRoadmap = {
+            skill: currentResults.skill,
+            level: currentResults.level || 'Beginner',
+            steps: steps
+        };
+
+        // Render dashboard card
+        renderDashboardRoadmap();
+
+        // Render in learning tab
+        renderStep('roadmap');
+
+        // Sync with backend
+        try {
+            await fetch('/sync-active-roadmap', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    skill: activeRoadmap.skill,
+                    level: activeRoadmap.level,
+                    steps: activeRoadmap.steps,
+                    completion_pct: 0.0
+                })
+            });
+        } catch (e) {
+            console.error("Failed to sync tracked roadmap:", e);
+        }
+    };
+
+    const untrackRoadmapFlow = async () => {
+        if (!activeRoadmap) return;
+        const ok = confirm(`Are you sure you want to stop tracking the roadmap for "${activeRoadmap.skill} (${activeRoadmap.level || 'Beginner'})"? Your progress will be permanently lost.`);
+        if (!ok) return;
+
+        activeRoadmap = null;
+        renderDashboardRoadmap();
+
+        // Update Learning tab if it was rendering the tracked roadmap
+        renderStep('roadmap');
+
+        try {
+            await fetch('/sync-active-roadmap', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(null)
+            });
+        } catch (e) {
+            console.error("Failed to untrack active roadmap:", e);
+        }
+    };
+
     // Silent click tracker
     const trackClick = (url, title, action = 'click') => {
         if (!url || url === '#') return;
@@ -619,34 +944,129 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const rm = currentResults.roadmap;
             if (rm) {
-                roadmapContent.innerHTML = `
-                    <div class="roadmap-section">
-                        <h3 style="font-family:'Outfit',sans-serif; margin-bottom:8px;">🌱 Beginner Phase</h3>
-                        <ul class="detailed-list">${(rm.beginner || []).map(i => `<li>${escapeHTML(i)}</li>`).join('')}</ul>
-                    </div>
-                    <div class="roadmap-section">
-                        <h3 style="font-family:'Outfit',sans-serif; margin-bottom:8px;">🔥 Intermediate Phase</h3>
-                        <ul class="detailed-list">${(rm.intermediate || []).map(i => `<li>${escapeHTML(i)}</li>`).join('')}</ul>
-                    </div>
-                    <div class="roadmap-section">
-                        <h3 style="font-family:'Outfit',sans-serif; margin-bottom:8px;">🚀 Advanced Phase</h3>
-                        <ul class="detailed-list">${(rm.advanced || []).map(i => `<li>${escapeHTML(i)}</li>`).join('')}</ul>
-                    </div>
-                    <div class="roadmap-section">
-                        <h3 style="font-family:'Outfit',sans-serif; margin-bottom:8px;">🛠️ Projects to Build</h3>
-                        <div class="projects-mini-list" style="display:flex; flex-direction:column; gap:10px;">
-                            ${(rm.projects || []).map(p => `<div class="action-box"><strong>${escapeHTML(p.name || p.title || 'Project')}:</strong> ${escapeHTML(p.description || '')}</div>`).join('')}
+                const isCurrentlyTracked = activeRoadmap && 
+                                           activeRoadmap.skill === currentResults.skill && 
+                                           activeRoadmap.level === (currentResults.level || 'Beginner');
+
+                // Add Tracking Status / Action Button at the top
+                const trackingBtnContainer = document.createElement('div');
+                trackingBtnContainer.style.marginBottom = '24px';
+                
+                if (isCurrentlyTracked) {
+                    trackingBtnContainer.innerHTML = `
+                        <div style="display:flex; gap:12px; align-items:center;">
+                            <button id="btn-track-this-roadmap" class="btn-outline-primary" style="flex:1; background:rgba(37,99,235,0.05); color:var(--primary); border-color:var(--primary); font-weight:700; pointer-events:none; cursor:default; height:44px; display:flex; align-items:center; justify-content:center; gap:8px; border-radius:var(--radius-md);">
+                                <span>✓ Currently Tracking Progress</span>
+                            </button>
+                            <button id="btn-learning-untrack" class="btn-outline-danger" style="color:var(--danger); border-color:var(--danger); height:44px; padding:0 16px; border-radius:var(--radius-md); font-weight:600; cursor:pointer; background:transparent; display:flex; align-items:center; justify-content:center; transition: all 0.2s;">
+                                Stop Tracking
+                            </button>
                         </div>
-                    </div>
-                    <div class="roadmap-section">
-                        <h3 style="font-family:'Outfit',sans-serif; margin-bottom:8px;">🏆 Recommended Certifications</h3>
-                        <ul class="keyword-tags" style="display:flex; flex-wrap:wrap; gap:8px; list-style:none;">${(rm.certifications || []).map(c => `<li><span class="pill-badge" style="background:var(--primary-light); color:var(--primary); border-color:transparent;">${escapeHTML(c)}</span></li>`).join('')}</ul>
-                    </div>
-                    <div class="roadmap-section">
-                        <h3 style="font-family:'Outfit',sans-serif; margin-bottom:8px;">💼 Interview Prep Focus</h3>
-                        <ul class="detailed-list">${(rm.interview_prep || []).map(i => `<li>${escapeHTML(i)}</li>`).join('')}</ul>
-                    </div>
-                `;
+                    `;
+                } else {
+                    trackingBtnContainer.innerHTML = `
+                        <button id="btn-track-this-roadmap" class="btn-primary" style="width:100%; height:44px; display:flex; align-items:center; justify-content:center; font-weight:600; font-size:0.9rem; border-radius:var(--radius-md);">
+                            🗺️ Track this Learning Roadmap
+                        </button>
+                    `;
+                }
+                roadmapContent.appendChild(trackingBtnContainer);
+
+                // Add button click listeners
+                const trackBtn = trackingBtnContainer.querySelector('#btn-track-this-roadmap');
+                if (trackBtn && !isCurrentlyTracked) {
+                    trackBtn.addEventListener('click', trackRoadmapFlow);
+                }
+                const untrackBtn = trackingBtnContainer.querySelector('#btn-learning-untrack');
+                if (untrackBtn) {
+                    untrackBtn.addEventListener('click', untrackRoadmapFlow);
+                }
+
+                // Render Checklist (interactive if tracked, styled static preview if not)
+                const checklistContainer = document.createElement('div');
+                checklistContainer.style.display = 'flex';
+                checklistContainer.style.flexDirection = 'column';
+                checklistContainer.style.gap = '20px';
+                roadmapContent.appendChild(checklistContainer);
+
+                const phases = [
+                    { key: 'beginner', label: '🌱 Beginner Phase' },
+                    { key: 'intermediate', label: '🔥 Intermediate Phase' },
+                    { key: 'advanced', label: '🚀 Advanced Phase' },
+                    { key: 'projects', label: '🛠️ Projects to Build' },
+                    { key: 'certifications', label: '🏆 Recommended Certifications' },
+                    { key: 'interview_prep', label: '💼 Interview Prep Focus' }
+                ];
+
+                phases.forEach(phase => {
+                    let items = [];
+                    if (isCurrentlyTracked) {
+                        items = activeRoadmap.steps.filter(s => s.phaseKey === phase.key);
+                    } else {
+                        // Static preview mapping from raw JSON
+                        const rawItems = rm[phase.key] || [];
+                        let idx = 1;
+                        items = rawItems.map(item => {
+                            if (phase.key === 'projects') {
+                                return {
+                                    id: `preview_${phase.key}_${idx++}`,
+                                    title: item.name || item.title || 'Project',
+                                    description: item.description || '',
+                                    completed: false
+                                };
+                            } else {
+                                return {
+                                    id: `preview_${phase.key}_${idx++}`,
+                                    title: item,
+                                    completed: false
+                                };
+                            }
+                        });
+                    }
+
+                    if (items.length > 0) {
+                        const phaseSection = document.createElement('div');
+                        phaseSection.className = 'roadmap-section';
+                        phaseSection.style.marginBottom = '10px';
+                        phaseSection.innerHTML = `
+                            <h3 style="font-family:'Outfit',sans-serif; margin-bottom:12px; font-size:1.05rem;">${phase.label}</h3>
+                            <div class="phase-steps-list" style="display:flex; flex-direction:column; gap:10px;"></div>
+                        `;
+                        const listWrap = phaseSection.querySelector('.phase-steps-list');
+
+                        items.forEach(step => {
+                            const stepEl = document.createElement('div');
+                            stepEl.className = `roadmap-step-item ${step.completed ? 'completed' : ''}`;
+                            
+                            const isProject = phase.key === 'projects';
+                            const descHtml = isProject && step.description ? `<span class="roadmap-step-desc">${escapeHTML(step.description)}</span>` : '';
+                            
+                            if (isCurrentlyTracked) {
+                                stepEl.innerHTML = `
+                                    <input type="checkbox" class="roadmap-checkbox" data-step-id="${step.id}" ${step.completed ? 'checked' : ''}>
+                                    <div class="roadmap-step-text-wrap">
+                                        <span class="roadmap-step-title">${escapeHTML(step.title)}</span>
+                                        ${descHtml}
+                                    </div>
+                                `;
+                                stepEl.querySelector('.roadmap-checkbox').addEventListener('change', (e) => {
+                                    toggleRoadmapStep(step.id, e.target.checked);
+                                });
+                            } else {
+                                stepEl.innerHTML = `
+                                    <input type="checkbox" class="roadmap-checkbox" disabled style="opacity: 0.6; cursor: not-allowed;">
+                                    <div class="roadmap-step-text-wrap">
+                                        <span class="roadmap-step-title" style="color:var(--text-sub);">${escapeHTML(step.title)}</span>
+                                        ${descHtml}
+                                    </div>
+                                `;
+                            }
+                            listWrap.appendChild(stepEl);
+                        });
+
+                        checklistContainer.appendChild(phaseSection);
+                    }
+                });
             }
         }
     };
@@ -1706,8 +2126,11 @@ document.addEventListener('DOMContentLoaded', () => {
             emptyState.style.display = 'block';
         } else if (targetViewId === 'view-analytics') {
             renderAnalyticsCharts();
+            initProfileMilestones();
         } else if (targetViewId === 'view-projects') {
             loadProjects();
+        } else if (targetViewId === 'view-settings') {
+            initProfileMilestones();
         }
     };
 
@@ -1731,6 +2154,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const interviewTabBtn = document.getElementById('btn-sidebar-interviews');
         if (interviewTabBtn) interviewTabBtn.click();
     });
+
+    // Active Roadmap Dashboard Actions
+    const untrackBtnDashboard = document.getElementById('btn-dashboard-untrack');
+    if (untrackBtnDashboard) {
+        untrackBtnDashboard.addEventListener('click', untrackRoadmapFlow);
+    }
+    const goLearningBtnDashboard = document.getElementById('btn-dashboard-go-learning');
+    if (goLearningBtnDashboard) {
+        goLearningBtnDashboard.addEventListener('click', () => {
+            const learningTabBtn = document.getElementById('btn-sidebar-learning');
+            if (learningTabBtn) learningTabBtn.click();
+        });
+    }
 
     // AI Recommendations Auto Search click triggers
     const triggerRecommendationSearch = (skillName) => {
@@ -1807,28 +2243,38 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Set Welcome back title initials and text
     const updateWelcomeMessage = async () => {
+        let name = 'Learner';
+        let email = 'learner@example.com';
+        
         try {
             const res = await fetch('/get-user-session');
             if (res.ok) {
                 const data = await res.json();
                 if (data.logged_in) {
-                    let name = data.name;
-                    name = name.charAt(0).toUpperCase() + name.slice(1);
-                    document.getElementById('welcome-title-banner').textContent = `Welcome back, ${name}! 👋`;
-                    document.getElementById('user-avatar-initials').textContent = name.substring(0, 2).toUpperCase();
-                    return;
+                    name = data.name;
+                    email = data.email || (name.toLowerCase() + '@example.com');
                 }
             }
         } catch (e) {
             console.error("Failed to fetch user session:", e);
+            const storedUser = sessionStorage.getItem('logged_in_user_email') || 'Learner';
+            name = storedUser.split('@')[0];
+            email = storedUser;
         }
 
-        const storedUser = sessionStorage.getItem('logged_in_user_email') || 'Learner';
-        let name = storedUser.split('@')[0];
         name = name.charAt(0).toUpperCase() + name.slice(1);
-        
+        const initials = name.substring(0, 2).toUpperCase();
+
         document.getElementById('welcome-title-banner').textContent = `Welcome back, ${name}! 👋`;
-        document.getElementById('user-avatar-initials').textContent = name.substring(0, 2).toUpperCase();
+        document.getElementById('user-avatar-initials').textContent = initials;
+
+        const profileName = document.getElementById('profile-user-name');
+        const profileEmail = document.getElementById('profile-user-email');
+        const profileAvatar = document.getElementById('profile-avatar');
+
+        if (profileName) profileName.textContent = name;
+        if (profileEmail) profileEmail.textContent = email;
+        if (profileAvatar) profileAvatar.textContent = initials;
     };
 
     const initDsaProgress = async () => {
@@ -1850,6 +2296,8 @@ document.addEventListener('DOMContentLoaded', () => {
     updateWelcomeMessage();
     initDsaProgress();
     initSavedPlaylists();
+    initActiveRoadmap();
+    initProfileMilestones();
 
     // Expose trackClick globally for inline onclick handlers
     window.trackClickGlobal = (url, title) => trackClick(url, title, 'click');

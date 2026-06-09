@@ -1600,3 +1600,102 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ── ACTIVE ROADMAP TRACKING SYSTEM ── */
+.roadmap-step-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  transition: all 0.2s var(--smooth);
+}
+
+.roadmap-step-item:hover {
+  border-color: var(--border-hover);
+  background: var(--bg-card);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+}
+
+.roadmap-step-item.completed {
+  background: rgba(37, 99, 235, 0.015);
+  border-color: rgba(37, 99, 235, 0.1);
+}
+
+.roadmap-checkbox {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--text-muted);
+  border-radius: 4px;
+  outline: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s var(--smooth);
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.roadmap-checkbox:checked {
+  background-color: var(--primary);
+  border-color: var(--primary);
+}
+
+.roadmap-checkbox:checked::after {
+  content: "✓";
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 900;
+}
+
+.roadmap-step-text-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex-grow: 1;
+}
+
+.roadmap-step-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-main);
+  transition: color 0.2s var(--smooth);
+  line-height: 1.4;
+}
+
+.roadmap-step-item.completed .roadmap-step-title {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.roadmap-step-desc {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.roadmap-phase-title-group {
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-sub);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 16px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.roadmap-phase-title-group:first-of-type {
+  margin-top: 0;
+}
+
+.roadmap-phase-icon {
+  font-size: 1rem;
+}
