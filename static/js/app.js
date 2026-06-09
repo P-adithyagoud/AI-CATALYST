@@ -511,6 +511,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const saveBtnLabel = isSaved ? '✅ Saved' : '💾 Save';
         const saveBtnClass = isSaved ? 'btn-save-playlist saved' : 'btn-save-playlist';
 
+        const isCert = !data.url.includes('youtube.com');
+        const btnLabel = isCert ? 'Join Course' : 'Watch Playlist';
+
+        const actionButtonsHtml = isCert ? `
+            <a href="${data.url}" target="_blank" class="btn-watch" rel="noopener noreferrer"
+               style="grid-column: span 2; text-align: center; background: var(--primary); border-color: transparent;"
+               onclick="trackClickGlobal('${data.url.replace(/'/g,"\\'")}',' ${escapeHTML(data.title).replace(/'/g,"\\'")}')">${btnLabel}</a>
+        ` : `
+            <a href="${data.url}" target="_blank" class="btn-watch" rel="noopener noreferrer"
+               style="background: var(--primary); border-color: transparent;"
+               onclick="trackClickGlobal('${data.url.replace(/'/g,"\\'")}',' ${escapeHTML(data.title).replace(/'/g,"\\'")}')">${btnLabel}</a>
+            <button class="${saveBtnClass}" data-url="${escapeHTML(data.url)}">
+                ${saveBtnLabel}
+            </button>
+        `;
+
         card.innerHTML = `
             <div class="card-header" style="flex-wrap: wrap;">
                 <span class="pill-badge" style="background: var(--primary); color: white;">${escapeHTML(category.toUpperCase())}</span>
@@ -522,28 +538,25 @@ document.addEventListener('DOMContentLoaded', () => {
             <p class="card-desc" style="margin-top: 10px;"><strong>💡 Why:</strong> ${escapeHTML(data.why_selected)}</p>
             <p class="card-desc"><strong>⏱️ Time:</strong> ${escapeHTML(data.estimated_time)} | <strong>🎯 Outcome:</strong> ${escapeHTML(data.expected_outcome)}</p>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: auto;">
-                <a href="${data.url}" target="_blank" class="btn-watch" rel="noopener noreferrer"
-                   style="background: var(--primary); border-color: transparent;"
-                   onclick="trackClickGlobal('${data.url.replace(/'/g,"\\'")}',' ${escapeHTML(data.title).replace(/'/g,"\\'")}')">Watch Playlist</a>
-                <button class="${saveBtnClass}" data-url="${escapeHTML(data.url)}">
-                    ${saveBtnLabel}
-                </button>
+                ${actionButtonsHtml}
             </div>
         `;
 
         const saveBtn = card.querySelector('.btn-save-playlist');
-        saveBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            togglePlaylistSave({
-                title: data.title,
-                channel: data.channel,
-                url: data.url,
-                duration: data.estimated_time || 'Full',
-                level: 'All',
-                skill: category
-            }, saveBtn);
-        });
+        if (saveBtn) {
+            saveBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                togglePlaylistSave({
+                    title: data.title,
+                    channel: data.channel,
+                    url: data.url,
+                    duration: data.estimated_time || 'Full',
+                    level: 'All',
+                    skill: category
+                }, saveBtn);
+            });
+        }
 
         return card;
     };
@@ -663,6 +676,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const saveBtnLabel = isSaved ? '✅ Saved' : '💾 Save';
         const saveBtnClass = isSaved ? 'btn-save-playlist saved' : 'btn-save-playlist';
 
+        const actionButtonsHtml = isCert ? `
+            <a href="${url}" target="_blank" class="btn-watch" rel="noopener noreferrer" style="grid-column: span 2; text-align: center;">
+                ${btnLabel}
+            </a>
+        ` : `
+            <a href="${url}" target="_blank" class="btn-watch" rel="noopener noreferrer">
+                ${btnLabel}
+            </a>
+            <button class="${saveBtnClass}" data-url="${escapeHTML(url)}">
+                ${saveBtnLabel}
+            </button>
+        `;
+
         card.innerHTML = `
             <div class="card-header" style="flex-wrap: wrap;">
                 <span class="rank-badge">#${rank}</span>
@@ -676,28 +702,25 @@ document.addEventListener('DOMContentLoaded', () => {
             <span class="channel-name">${escapeHTML(channel)}</span>
             <p class="card-desc">${escapeHTML(desc)}</p>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: auto;">
-                <a href="${url}" target="_blank" class="btn-watch" rel="noopener noreferrer">
-                    ${btnLabel}
-                </a>
-                <button class="${saveBtnClass}" data-url="${escapeHTML(url)}">
-                    ${saveBtnLabel}
-                </button>
+                ${actionButtonsHtml}
             </div>
         `;
         
         const saveBtn = card.querySelector('.btn-save-playlist');
-        saveBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            togglePlaylistSave({
-                title,
-                channel,
-                url,
-                duration,
-                level,
-                skill: currentSkill || level
-            }, saveBtn);
-        });
+        if (saveBtn) {
+            saveBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                togglePlaylistSave({
+                    title,
+                    channel,
+                    url,
+                    duration,
+                    level,
+                    skill: currentSkill || level
+                }, saveBtn);
+            });
+        }
 
         return card;
     };
